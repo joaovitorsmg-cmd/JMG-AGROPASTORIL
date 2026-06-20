@@ -700,15 +700,24 @@ function goCalc(c){nav('calc');switchCalc(c);}
 
 /* ---- INIT ---- */
 function initApp(){
-  const d=new Date();
-  const dias=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
-  const meses=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-  document.getElementById('dataHoje').textContent=`${dias[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
-  renderKPIs(); renderAlertas(); renderClientes(); renderSaber(); renderLearn(); loadApiKey();
-  // status sync (simulado neste esboço)
-  navigator.onLine ? setSync(true) : setSync(false);
-  window.addEventListener('online',()=>setSync(true));
-  window.addEventListener('offline',()=>setSync(false));
+  try{
+    const d=new Date();
+    const dias=['domingo','segunda','terça','quarta','quinta','sexta','sábado'];
+    const meses=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+    const el=document.getElementById('dataHoje');
+    if(el) el.textContent=`${dias[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]} de ${d.getFullYear()}`;
+  }catch(e){ console.warn('data',e); }
+  try{ renderKPIs(); }catch(e){ console.warn('KPIs',e); }
+  try{ renderAlertas(); }catch(e){ console.warn('alertas',e); }
+  try{ renderClientes(); }catch(e){ console.warn('clientes',e); }
+  try{ renderSaber(); }catch(e){ console.warn('saber',e); }
+  try{ renderLearn(); }catch(e){ console.warn('learn',e); }
+  try{ loadApiKey(); }catch(e){ console.warn('apikey',e); }
+  try{
+    navigator.onLine ? setSync(true) : setSync(false);
+    window.addEventListener('online',()=>setSync(true));
+    window.addEventListener('offline',()=>setSync(false));
+  }catch(e){ console.warn('sync',e); }
 }
 function setSync(on){
   const d=document.getElementById('syncDot');
@@ -1586,17 +1595,26 @@ if('serviceWorker' in navigator){
   });
 }
 
-/* ---- BOOT (sem login — só você usa) ---- */
-// Splash de entrada — initApp sempre roda imediatamente
-initApp();
-requestAnimationFrame(()=>{ 
-  const bar=document.getElementById('splashBar');
-  if(bar) bar.style.width='100%';
+/* ---- BOOT ---- */
+function hideSplash(){
+  try{
+    const sp=document.getElementById('splash');
+    if(sp){ sp.style.opacity='0'; setTimeout(()=>{ sp.style.display='none'; },500); }
+  }catch(e){}
+}
+// Splash some SEMPRE após 2s — independente de qualquer erro
+setTimeout(hideSplash, 2000);
+
+// Animar barra dourada
+requestAnimationFrame(()=>{
+  try{ const b=document.getElementById('splashBar'); if(b) b.style.width='100%'; }catch(e){}
 });
-setTimeout(()=>{
-  const sp=document.getElementById('splash');
-  if(sp){ sp.style.opacity='0'; setTimeout(()=>{ sp.style.display='none'; }, 500); }
-}, 1600);
+
+// Iniciar app com proteção total
+try{ initApp(); } catch(e){
+  console.error('initApp erro:',e);
+  hideSplash(); // se der erro, tira o splash na hora
+}
 </script>
 </body>
 </html>
