@@ -1,0 +1,14 @@
+{
+  "name": "JMG Agropastoril — Consultor",
+  "short_name": "JMG Agro",
+  "description": "Painel pessoal de consultoria agropecuária",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#1E4A18",
+  "theme_color": "#367C2B",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
