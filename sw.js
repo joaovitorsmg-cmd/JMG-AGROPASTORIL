@@ -2,7 +2,7 @@
    SERVICE WORKER — Painel Representante Agroquima
    Permite funcionamento OFFLINE após primeiro acesso
    ===================================================== */
-const CACHE = 'jmg-painel-v1';
+const CACHE = 'jmg-painel-v2';
 const ARQUIVOS = [
   './',
   './index.html'
@@ -17,11 +17,10 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', e => {
@@ -30,7 +29,21 @@ self.addEventListener('fetch', e => {
     e.respondWith(fetch(e.request));
     return;
   }
-  // Todo o resto: cache-first (funciona offline)
+  // Navegação/HTML: network-first — garante que a versão nova publicada
+  // sempre é usada primeiro; cache é só um fallback para modo offline.
+  if(e.request.mode === 'navigate' || e.request.url.endsWith('.html') || e.request.url.endsWith('/')){
+    e.respondWith(
+      fetch(e.request)
+        .then(resp => {
+          const copy = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
+          return resp;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
+  // Demais arquivos (ícones, manifest etc.): cache-first (funciona offline)
   e.respondWith(
     caches.match(e.request).then(cached => cached || fetch(e.request))
   );
