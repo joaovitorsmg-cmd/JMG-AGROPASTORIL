@@ -665,6 +665,10 @@ input,select,textarea{font-family:inherit;font-size:15px}
   </div>
 </div>
 
+<div id="modal" class="modal">
+  <div id="modalCard" class="modal-card"></div>
+</div>
+
 <script>
 /* ============================================================
    PAINEL DO REPRESENTANTE — JMG · v1 (esboço funcional)
@@ -1366,7 +1370,7 @@ function atualizarStatusKey(){
 /* ---- MODAL ---- */
 function modal(html){document.getElementById('modalCard').innerHTML=html;document.getElementById('modal').classList.add('show');}
 function fecharModal(){document.getElementById('modal').classList.remove('show');}
-document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')fecharModal();});
+try{ document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')fecharModal();}); }catch(e){ console.warn('modal listener',e); }
 
 /* ============================================================
    CONSULTOR DE CLIENTE — Chat Claude + Visita + Dossiê
