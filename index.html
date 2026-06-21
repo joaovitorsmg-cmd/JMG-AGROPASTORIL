@@ -505,7 +505,31 @@ input,select,textarea{font-family:inherit;font-size:15px}
         <div class="field"><label>Taxa é</label><select id="rp_jurosPeriodo"><option value="mes">% ao mês</option><option value="dia">% ao dia</option></select></div>
       </div>
       <div class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="rp_prazo" placeholder="ex: 30"></div>
-      <button class="btn-calc" onclick="visualizarOrcamentoRapido()">👁️ Visualizar orçamento rápido</button>
+
+      <div class="prod-cat" style="margin-top:14px">Frete (seu controle — valor nunca vai pro cliente)</div>
+      <div class="row2">
+        <div class="field"><label>Tipo</label><select id="rp_freteTipo" onchange="atualizarCamposFreteRapido()">
+          <option value="">Sem frete (incluso/grátis)</option>
+          <option value="percentual">% sobre o total</option>
+          <option value="valor">Valor fixo (R$)</option>
+          <option value="por_saco">Valor por saco (R$/sc)</option>
+          <option value="por_km">Valor por km rodado (R$/km)</option>
+        </select></div>
+        <div class="field"><label>Valor</label><input type="number" id="rp_freteValor" placeholder="0" oninput="atualizarPreviaFreteRapido()"></div>
+      </div>
+      <div id="rp_wrapFreteKm" class="field" style="display:none"><label>Km rodado</label><input type="number" id="rp_freteKm" placeholder="0" oninput="atualizarPreviaFreteRapido()"></div>
+      <div class="field" style="margin-top:10px"><label>Responsável pela entrega</label>
+        <select id="rp_freteResponsavel" onchange="atualizarPreviaFreteRapido()">
+          <option value="">Não definido</option>
+          <option value="cliente">Por conta do cliente</option>
+          <option value="agroquima">Agroquima Entrega</option>
+          <option value="transportadora">Transportadora</option>
+        </select>
+      </div>
+      <div id="rp_previaFrete" class="result-note" style="margin-top:6px"></div>
+      <div class="result-note" style="margin-top:2px">⚠️ Esse custo é só pra você se organizar — nunca aparece no PDF nem na mensagem do cliente, só o rótulo do responsável.</div>
+
+      <button class="btn-calc" style="margin-top:14px" onclick="visualizarOrcamentoRapido()">👁️ Visualizar orçamento rápido</button>
     </div>
   </div>
 </div>
@@ -1159,6 +1183,7 @@ function buscarProdutosBase(q,limite){
   const termos = nq.split(/\s+/).filter(Boolean);
   const out=[];
   for(const p of PRODUTOS_BASE){
+    if(p.s==='MATERIA PRIMA') continue; // matéria-prima é insumo interno de fabricação, nunca um item vendável ao cliente
     const nn = normalizarHeader(p.n);
     const cod = String(p.c);
     if(termos.every(t=>nn.includes(t) || cod.includes(t))) out.push(p);
@@ -1361,6 +1386,35 @@ function renderRapidoItens(){
   box.innerHTML = _rapidoItens.map((it,i)=>`
     <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.preco)} <button onclick="removerItemRapido(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('')
     + `<div class="result-line" style="margin-top:6px;font-size:16px"><span>Subtotal</span><b>${formatBRL(total)}</b></div>`;
+  atualizarPreviaFreteRapido();
+}
+function lerFreteRapidoForm(){
+  const tipoEl=document.getElementById('rp_freteTipo');
+  if(!tipoEl) return null;
+  const tipo=tipoEl.value;
+  const responsavel=document.getElementById('rp_freteResponsavel').value;
+  if(!tipo&&!responsavel) return null;
+  const frete={tipo:tipo||null, responsavel:responsavel||null};
+  if(tipo){
+    frete.valor=+document.getElementById('rp_freteValor').value||0;
+    if(tipo==='por_km') frete.km=+document.getElementById('rp_freteKm').value||0;
+  }
+  return frete;
+}
+function atualizarCamposFreteRapido(){
+  const tipoEl=document.getElementById('rp_freteTipo');
+  if(!tipoEl) return;
+  document.getElementById('rp_wrapFreteKm').style.display=tipoEl.value==='por_km'?'block':'none';
+  atualizarPreviaFreteRapido();
+}
+function atualizarPreviaFreteRapido(){
+  const box=document.getElementById('rp_previaFrete');
+  if(!box) return;
+  const frete=lerFreteRapidoForm();
+  const total=_rapidoItens.reduce((s,it)=>s+it.qtd*it.preco,0);
+  const itensConv=_rapidoItens.map(it=>({produto:it.produto,qtd:it.qtd,unidade:it.unidade,valorUnit:it.preco}));
+  const custo=frete&&frete.tipo?calcularValorFrete({itens:itensConv,total,frete}):0;
+  box.innerHTML=custo>0?`💰 Custo de frete estimado: <b>${formatBRL(custo)}</b> — confira se isso já está coberto no preço dos itens antes de enviar pro cliente.`:'';
 }
 function visualizarOrcamentoRapido(){
   if(!_rapidoItens.length){ alert('Adicione ao menos um item.'); return; }
@@ -1372,12 +1426,17 @@ function visualizarOrcamentoRapido(){
   const totalPrazo = subtotal*(1+jurosTotalPct/100);
   const itensHtml = _rapidoItens.map(it=>`
     <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade} × ${formatBRL(it.preco)}</span><b>${formatBRL(it.qtd*it.preco)}</b></div>`).join('');
+  const frete=lerFreteRapidoForm();
+  const itensConv=_rapidoItens.map(it=>({produto:it.produto,qtd:it.qtd,unidade:it.unidade,valorUnit:it.preco}));
+  const custoFrete=frete&&frete.tipo?calcularValorFrete({itens:itensConv,total:subtotal,frete}):0;
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
     <h2>⚡ Orçamento rápido</h2>
     <div class="result" style="display:block">${itensHtml}</div>
     <div class="result-line" style="margin-top:10px;font-size:18px"><span>Total à vista</span><b>${formatBRL(subtotal)}</b></div>
     ${juros>0&&prazoDias>0?`<div class="result-line" style="font-size:16px;color:var(--cinza)"><span>Total a prazo (${prazoDias} dias, ${juros}% ao ${jurosPeriodo==='mes'?'mês':'dia'} = +${jurosTotalPct.toFixed(2)}%)</span><b>${formatBRL(totalPrazo)}</b></div>`:''}
+    ${custoFrete>0?`<div class="result-line" style="color:var(--cinza)"><span>Custo de frete (seu controle — não cobrado do cliente)</span><b>${formatBRL(custoFrete)}</b></div>`:''}
+    ${frete&&frete.responsavel?`<div class="result-note" style="margin-top:4px">Responsável pela entrega: <b>${FRETE_RESPONSAVEL_LABELS[frete.responsavel]}</b> — esse é o único dado de frete que pode ir pro cliente.</div>`:''}
     <div class="disclaimer" style="margin-top:14px">Valores e prazos sujeitos à confirmação. Sem registro de cliente — use a aba Orçamentos para gerar documento formal e acompanhar.</div>
     <button class="btn-calc" style="margin-top:14px" onclick="enviarRapidoParaFormal()">📋 Transformar em orçamento formal</button>
     <button onclick="_rapidoItens=[];renderRapidoItens();fecharModal();" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verm);border-radius:12px;font-size:15px;font-weight:700">🗑️ Limpar e começar novo</button>
@@ -1386,12 +1445,14 @@ function visualizarOrcamentoRapido(){
 function enviarRapidoParaFormal(){
   if(!_rapidoItens.length) return;
   const prazoDias = +document.getElementById('rp_prazo').value||0;
+  const frete = lerFreteRapidoForm();
   const itensCopy = JSON.parse(JSON.stringify(_rapidoItens)).map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:it.preco}));
   fecharModal();
   nav('orcamentos');
   abrirNovoOrcamento(null, null);
   _orcDraft.itens = itensCopy;
   if(prazoDias>0) _orcDraft.prazoDiasPadrao = prazoDias;
+  if(frete) _orcDraft.frete = frete;
   renderFormOrcamento();
 }
 
@@ -1697,7 +1758,7 @@ function renderOrcamentos(){
     return `<div class="cli-card" onclick="abrirOrcamento(${o.id})">
       <div class="cli-top">
         <div><div class="cli-nome">${o.clienteNome||'(sem cliente)'}</div><div class="cli-loc">📅 ${o.criadoEm||''}</div></div>
-        <div class="lc-status ${sc}">${sl}</div>
+        <div style="text-align:right">${validadeBadgeHtml(o)}<div class="lc-status ${sc}">${sl}</div></div>
       </div>
       <div class="cli-stats">
         <div class="cli-stat"><div class="n">${formatBRL(o.total||0)}</div><div class="l">total</div></div>
@@ -1709,7 +1770,7 @@ function renderOrcamentos(){
 }
 function abrirNovoOrcamento(editId, presetClienteId){
   const o = editId ? DB.orcamentos.find(x=>x.id===editId) : null;
-  _orcDraft = o ? JSON.parse(JSON.stringify(o)) : {id:null, clienteId:presetClienteId||null, itens:[], validadeDias:7, obs:'', status:'aberto', historico:[]};
+  _orcDraft = o ? JSON.parse(JSON.stringify(o)) : {id:null, clienteId:presetClienteId||null, itens:[], validadeDias:7, obs:'', frete:null, status:'aberto', historico:[]};
   renderFormOrcamento();
 }
 function renderFormOrcamento(){
@@ -1718,6 +1779,7 @@ function renderFormOrcamento(){
   const itensHtml=_orcDraft.itens.map((it,i)=>`
     <div class="result-line" style="cursor:pointer" title="Toque para editar este item" onclick="editarItemOrc(${i})"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.valorUnit)} <button onclick="event.stopPropagation();removerItemOrc(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('') || '<div class="result-note">Nenhum item adicionado ainda</div>';
   const total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
+  const fd=_orcDraft.frete;
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
     <h2>${editId?'Editar orçamento':'Novo orçamento'}</h2>
@@ -1738,10 +1800,35 @@ function renderFormOrcamento(){
     </div>
     <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde)" onclick="adicionarItemOrc()">➕ Adicionar item</button>
     <div class="result-line" style="margin-top:14px;font-size:16px"><span>Total</span><b>${formatBRL(total)}</b></div>
+
+    <div class="prod-cat" style="margin-top:14px">Frete (seu controle — valor nunca vai pro cliente)</div>
+    <div class="row2">
+      <div class="field"><label>Tipo</label><select id="orc_freteTipo" onchange="atualizarCamposFreteOrc()">
+        <option value="" ${!fd||!fd.tipo?'selected':''}>Sem frete (incluso/grátis)</option>
+        <option value="percentual" ${fd&&fd.tipo==='percentual'?'selected':''}>% sobre o total</option>
+        <option value="valor" ${fd&&fd.tipo==='valor'?'selected':''}>Valor fixo (R$)</option>
+        <option value="por_saco" ${fd&&fd.tipo==='por_saco'?'selected':''}>Valor por saco (R$/sc)</option>
+        <option value="por_km" ${fd&&fd.tipo==='por_km'?'selected':''}>Valor por km rodado (R$/km)</option>
+      </select></div>
+      <div class="field"><label>Valor</label><input type="number" id="orc_freteValor" placeholder="0" value="${fd&&fd.valor?fd.valor:''}" oninput="atualizarPreviaFreteOrc()"></div>
+    </div>
+    <div id="orc_wrapFreteKm" class="field" style="display:none"><label>Km rodado</label><input type="number" id="orc_freteKm" placeholder="0" value="${fd&&fd.km?fd.km:''}" oninput="atualizarPreviaFreteOrc()"></div>
+    <div class="field" style="margin-top:10px"><label>Responsável pela entrega</label>
+      <select id="orc_freteResponsavel" onchange="atualizarPreviaFreteOrc()">
+        <option value="" ${!fd||!fd.responsavel?'selected':''}>Não definido</option>
+        <option value="cliente" ${fd&&fd.responsavel==='cliente'?'selected':''}>Por conta do cliente</option>
+        <option value="agroquima" ${fd&&fd.responsavel==='agroquima'?'selected':''}>Agroquima Entrega</option>
+        <option value="transportadora" ${fd&&fd.responsavel==='transportadora'?'selected':''}>Transportadora</option>
+      </select>
+    </div>
+    <div id="orc_previaFrete" class="result-note" style="margin-top:6px"></div>
+    <div class="result-note" style="margin-top:2px">⚠️ Esse custo é só pra você se organizar e cobrar certo — nunca aparece no PDF nem na mensagem do cliente, só o rótulo do responsável pela entrega.</div>
+
     <div class="field" style="margin-top:14px"><label>Validade (dias)</label><input type="number" id="orc_validade" value="${_orcDraft.validadeDias||7}"></div>
-    <div class="field"><label>Observações</label><textarea id="orc_obs" placeholder="condições de pagamento, frete, etc.">${_orcDraft.obs||''}</textarea></div>
+    <div class="field"><label>Observações</label><textarea id="orc_obs" placeholder="condições de pagamento, etc.">${_orcDraft.obs||''}</textarea></div>
     <button class="btn-calc" onclick="salvarOrcamento()">${editId?'Salvar alterações':'Criar orçamento'}</button>
   `);
+  atualizarCamposFreteOrc();
 }
 function _syncDraftCampos(){
   const cliSel=document.getElementById('orc_cliente');
@@ -1750,6 +1837,35 @@ function _syncDraftCampos(){
   if(val) _orcDraft.validadeDias=+val.value||_orcDraft.validadeDias;
   const obs=document.getElementById('orc_obs');
   if(obs) _orcDraft.obs=obs.value;
+  const freteTipoEl=document.getElementById('orc_freteTipo');
+  if(freteTipoEl){
+    const freteTipo=freteTipoEl.value;
+    const freteResponsavel=document.getElementById('orc_freteResponsavel').value;
+    if(freteTipo||freteResponsavel){
+      const frete={tipo:freteTipo||null, responsavel:freteResponsavel||null};
+      if(freteTipo){
+        frete.valor=+document.getElementById('orc_freteValor').value||0;
+        if(freteTipo==='por_km') frete.km=+document.getElementById('orc_freteKm').value||0;
+      }
+      _orcDraft.frete=frete;
+    } else {
+      _orcDraft.frete=null;
+    }
+  }
+}
+function atualizarCamposFreteOrc(){
+  const tipoEl=document.getElementById('orc_freteTipo');
+  if(!tipoEl) return;
+  document.getElementById('orc_wrapFreteKm').style.display=tipoEl.value==='por_km'?'block':'none';
+  atualizarPreviaFreteOrc();
+}
+function atualizarPreviaFreteOrc(){
+  _syncDraftCampos();
+  const box=document.getElementById('orc_previaFrete');
+  if(!box) return;
+  const total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
+  const custo=_orcDraft.frete&&_orcDraft.frete.tipo?calcularValorFrete({itens:_orcDraft.itens,total,frete:_orcDraft.frete}):0;
+  box.innerHTML=custo>0?`💰 Custo de frete estimado: <b>${formatBRL(custo)}</b> — confira se isso já está coberto no preço dos itens antes de enviar pro cliente.`:'';
 }
 function adicionarItemOrc(){
   const produto=document.getElementById('oi_prod').value.trim();
@@ -1813,6 +1929,7 @@ function abrirOrcamento(id){
     <button class="modal-x" onclick="fecharModal()">✕</button>
     <h2>${o.clienteNome}</h2>
     <div class="cli-loc" style="margin-bottom:10px">Criado em ${o.criadoEm} · válido por ${o.validadeDias||7} dias</div>
+    ${(()=>{ const dias=diasRestantesValidade(o); if((o.status!=='aberto'&&o.status!=='negociacao')||dias===null||dias>2) return ''; const estiloBase='font-style:normal;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-weight:700'; return dias<0 ? `<div class="result-note" style="${estiloBase};background:#ffebee;color:var(--verm)">⏰ Esse orçamento venceu há ${-dias} dia${-dias!==1?'s':''} — confirme se o preço ainda é válido antes de enviar pro cliente.</div>` : `<div class="result-note" style="${estiloBase};background:#fff3e0;color:var(--laranja)">⏰ Vence em ${dias} dia${dias!==1?'s':''} — combine o fechamento ou renove o orçamento.</div>`; })()}
     <select id="orc_status_sel" onchange="mudarStatusOrc(${o.id},this.value)" style="width:100%;padding:10px;border:2px solid var(--borda);border-radius:10px;margin-bottom:14px;font-weight:700">
       <option value="aberto" ${o.status==='aberto'?'selected':''}>🟡 Aberto</option>
       <option value="negociacao" ${o.status==='negociacao'?'selected':''}>🔵 Em negociação</option>
@@ -1822,6 +1939,7 @@ function abrirOrcamento(id){
     <div class="prod-cat">Itens</div>
     <div class="result" style="display:block">${itensHtml}</div>
     <div class="result-line" style="margin-top:10px;font-size:16px"><span>Total</span><b>${formatBRL(o.total||0)}</b></div>
+    ${o.frete&&(o.frete.tipo||o.frete.responsavel)?`<div class="result-note" style="margin-top:8px">🚚 Frete (só pra você, não vai pro cliente): ${calcularValorFrete(o)>0?`<b>${formatBRL(calcularValorFrete(o))}</b> · `:''}responsável: <b>${o.frete.responsavel?FRETE_RESPONSAVEL_LABELS[o.frete.responsavel]:'não definido'}</b></div>`:''}
     ${o.obs?`<div class="result-note" style="margin-top:10px">${o.obs}</div>`:''}
     ${o.motivoGanho?`<div class="result-note" style="margin-top:6px;color:var(--verde)">✅ Motivo do fechamento: ${o.motivoGanho}</div>`:''}
     ${o.motivoPerda?`<div class="result-note" style="margin-top:6px;color:var(--verm)">❌ Motivo da perda: ${o.motivoPerda}</div>`:''}
@@ -1868,6 +1986,20 @@ function proximoDiaPagamento(dataISO,diaPagamento){
   return d.toISOString().slice(0,10);
 }
 function isoParaBR(iso){ return (iso||'').split('-').reverse().join('/'); }
+function diasRestantesValidade(o){
+  if(!o.criadoEm) return null;
+  const venc=addDias(o.criadoEm, o.validadeDias||7);
+  const hoje=new Date().toISOString().slice(0,10);
+  return Math.round((new Date(venc+'T00:00:00')-new Date(hoje+'T00:00:00'))/86400000);
+}
+function validadeBadgeHtml(o){
+  if(o.status!=='aberto' && o.status!=='negociacao') return '';
+  const dias=diasRestantesValidade(o);
+  if(dias===null) return '';
+  if(dias<0) return `<div class="lc-status" style="background:#ffebee;color:var(--verm);margin-bottom:4px">⏰ Vencido há ${-dias}d</div>`;
+  if(dias<=2) return `<div class="lc-status" style="background:#fff3e0;color:var(--laranja);margin-bottom:4px">⏰ Vence em ${dias}d</div>`;
+  return '';
+}
 function proximasDatasSafra(hoje){
   const ano=+hoje.slice(0,4);
   return ['04-30','05-30','08-30'].map(md=>{
@@ -2026,7 +2158,7 @@ function abrirComissaoStatus(id,motivo,modoEdicao){
   const pagExistente=modoEdicao&&o.pagamento?o.pagamento:null;
   const comissaoExistente=modoEdicao&&o.comissao?o.comissao:null;
   const premExistente=comissaoExistente&&comissaoExistente.premiacao;
-  const freteExistente=modoEdicao&&o.frete?o.frete:null;
+  const freteExistente=o.frete||null;
   const itensHtml=(o.itens||[]).map((it,i)=>{
     const ci=comissaoExistente&&comissaoExistente.base==='item'&&comissaoExistente.itens?comissaoExistente.itens.find(x=>x.produto===it.produto):null;
     return `
@@ -2580,6 +2712,11 @@ function construirDocPDF(orcId, tipo, logoImg){
   doc.setFontSize(13); doc.setTextColor(30,74,24);
   doc.text(`Total: ${formatBRL(o.total||0)}`, 140, y); y+=12;
 
+  if(o.frete && o.frete.responsavel){
+    doc.setFontSize(10); doc.setTextColor(40);
+    doc.text(`Frete: ${FRETE_RESPONSAVEL_LABELS[o.frete.responsavel]||o.frete.responsavel}`, 14, y); y+=9;
+  }
+
   if(tipo==='pedido' && o.pagamento){
     if(y>250){ doc.addPage(); y=20; }
     doc.setFontSize(11); doc.setTextColor(30,74,24);
@@ -2591,9 +2728,6 @@ function construirDocPDF(orcId, tipo, logoImg){
       o.comissao.parcelas.forEach(p=>{
         doc.text(`Parcela ${p.numero}: ${formatBRL(p.valorParcela)} — quitação prevista ${p.dataQuitacaoPrevista}`, 14, y); y+=5;
       });
-    }
-    if(o.frete && o.frete.responsavel){
-      doc.text(`Frete: ${FRETE_RESPONSAVEL_LABELS[o.frete.responsavel]||o.frete.responsavel}`, 14, y); y+=5;
     }
     y+=5;
   } else if(tipo==='orcamento'){
@@ -2978,7 +3112,6 @@ function finishQuiz(){
 let _apiKey = '';
 
 function loadApiKey(){
-  // sessionStorage: dura a sessão. Em produção usar localStorage.
   _apiKey = localStorage.getItem('jmg_api_key') || '';
   atualizarStatusKey();
 }
