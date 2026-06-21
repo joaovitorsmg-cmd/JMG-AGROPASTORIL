@@ -1537,6 +1537,8 @@ function abrirOrcamento(id){
     <div class="result" style="display:block">${itensHtml}</div>
     <div class="result-line" style="margin-top:10px;font-size:16px"><span>Total</span><b>${formatBRL(o.total||0)}</b></div>
     ${o.obs?`<div class="result-note" style="margin-top:10px">${o.obs}</div>`:''}
+    ${o.motivoGanho?`<div class="result-note" style="margin-top:6px;color:var(--verde)">✅ Motivo do fechamento: ${o.motivoGanho}</div>`:''}
+    ${o.motivoPerda?`<div class="result-note" style="margin-top:6px;color:var(--verm)">❌ Motivo da perda: ${o.motivoPerda}</div>`:''}
 
     <div class="prod-cat" style="margin-top:18px">Acompanhamento</div>
     <div class="result" style="display:block;max-height:160px;overflow:auto">${histHtml}</div>
@@ -1554,13 +1556,50 @@ function abrirOrcamento(id){
     </div>
   `);
 }
+const MOTIVOS_GANHO=['Preço competitivo','Prazo de pagamento','Relacionamento/confiança','Produto disponível na hora','Indicação/recomendação','Outro'];
+const MOTIVOS_PERDA=['Preço da concorrência','Falta de prazo/crédito','Cliente sem orçamento/verba no momento','Comprou de outro fornecedor','Desistiu da compra','Sem retorno do cliente','Outro'];
 function mudarStatusOrc(id,status){
+  if(status==='fechado'||status==='perdido'){ abrirMotivoStatus(id,status); return; }
+  aplicarStatusOrc(id,status);
+}
+function aplicarStatusOrc(id,status,motivo){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
   o.status=status;
   o.historico=o.historico||[];
   const lbl={aberto:'Aberto',negociacao:'Em negociação',fechado:'Fechado (venda concluída)',perdido:'Perdido'}[status]||status;
-  o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Status alterado para: '+lbl});
+  let texto='Status alterado para: '+lbl;
+  if(motivo){
+    texto+=' — motivo: '+motivo;
+    if(status==='fechado'){ o.motivoGanho=motivo; o.motivoPerda=null; }
+    else { o.motivoPerda=motivo; o.motivoGanho=null; }
+  }
+  o.historico.push({data:new Date().toISOString().slice(0,10),texto});
   saveDB();renderOrcamentos();renderKPIs();
+  if(document.getElementById('modal').classList.contains('show')) abrirOrcamento(id);
+}
+function abrirMotivoStatus(id,status){
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  const lista=status==='fechado'?MOTIVOS_GANHO:MOTIVOS_PERDA;
+  const titulo=status==='fechado'?'🟢 Por que fechou essa venda?':'🔴 Por que perdeu esse orçamento?';
+  modal(`
+    <button class="modal-x" onclick="abrirOrcamento(${id})">✕</button>
+    <h2>${titulo}</h2>
+    <div class="cli-loc" style="margin-bottom:12px">${o.clienteNome}</div>
+    <div class="field"><label>Motivo</label>
+      <select id="motivoSel" onchange="document.getElementById('motivoOutroWrap').style.display=this.value==='Outro'?'block':'none'">
+        ${lista.map(m=>`<option value="${m}">${m}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field" id="motivoOutroWrap" style="display:none"><label>Descreva o motivo</label><input id="motivoOutro" placeholder="ex: cliente achou o frete caro"></div>
+    <button class="btn-calc" onclick="confirmarMotivoStatus(${id},'${status}')">✅ Confirmar</button>
+    <button onclick="aplicarStatusOrc(${id},'${status}')" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verde);border-radius:12px;font-size:15px;font-weight:700">Pular sem informar motivo</button>
+  `);
+}
+function confirmarMotivoStatus(id,status){
+  const sel=document.getElementById('motivoSel').value;
+  const outro=(document.getElementById('motivoOutro')?.value||'').trim();
+  const motivo=(sel==='Outro'&&outro)?outro:sel;
+  aplicarStatusOrc(id,status,motivo);
 }
 function registrarAcompanhamento(id){
   const inp=document.getElementById('orc_nota');
