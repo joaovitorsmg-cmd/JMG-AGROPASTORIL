@@ -2,7 +2,7 @@
    SERVICE WORKER — Painel Representante Agroquima
    Permite funcionamento OFFLINE após primeiro acesso
    ===================================================== */
-const CACHE = 'jmg-painel-v2';
+const CACHE = 'jmg-painel-v3';
 const ARQUIVOS = [
   './',
   './index.html'
@@ -43,8 +43,18 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-  // Demais arquivos (ícones, manifest etc.): cache-first (funciona offline)
+  // Demais arquivos (ícones, manifest, libs CDN etc.): cache-first,
+  // mas guarda a resposta da rede para realmente funcionar offline depois.
   e.respondWith(
-    caches.match(e.request).then(cached => cached || fetch(e.request))
+    caches.match(e.request).then(cached => {
+      if(cached) return cached;
+      return fetch(e.request).then(resp => {
+        if(resp && resp.status === 200){
+          const copy = resp.clone();
+          caches.open(CACHE).then(c => c.put(e.request, copy));
+        }
+        return resp;
+      }).catch(() => cached);
+    })
   );
 });

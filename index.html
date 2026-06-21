@@ -12,6 +12,7 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="icon" type="image/png" href="favicon.png">
 <title>Painel do Representante · JMG Agropastoril</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <style>
 :root{
   --verde:#367C2B; --verde-esc:#1E4A18; --verde-cl:#EAF4E7;
@@ -291,7 +292,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
 
   <div class="kpi-row">
     <div class="kpi"><div class="kpi-num" id="kpiClientes">0</div><div class="kpi-lbl">Clientes na carteira</div></div>
-    <div class="kpi o"><div class="kpi-num" id="kpiOrc">0</div><div class="kpi-lbl">Orçamentos abertos</div></div>
+    <div class="kpi o" onclick="nav('orcamentos')" style="cursor:pointer"><div class="kpi-num" id="kpiOrc">0</div><div class="kpi-lbl">Orçamentos abertos</div></div>
     <div class="kpi v"><div class="kpi-num" id="kpiVendas">R$ 0</div><div class="kpi-lbl">Vendas no mês</div></div>
     <div class="kpi r"><div class="kpi-num" id="kpiAlertas">0</div><div class="kpi-lbl">Alertas de recompra</div></div>
   </div>
@@ -458,6 +459,21 @@ input,select,textarea{font-family:inherit;font-size:15px}
 </div>
 <button class="btn-add" id="btnAddCli" onclick="abrirNovoCli()" style="display:none">+</button>
 
+<!-- ===== ORÇAMENTOS ===== -->
+<div class="view" id="v-orcamentos">
+  <div class="view-title">Orçamentos</div>
+  <div class="view-desc">Acompanhe, cobre e gere PDF dos orçamentos enviados</div>
+  <div class="subtabs" id="orcTabs">
+    <div class="subtab active" data-os="todos" onclick="filterOrc('todos')">Todos</div>
+    <div class="subtab" data-os="aberto" onclick="filterOrc('aberto')">🟡 Aberto</div>
+    <div class="subtab" data-os="negociacao" onclick="filterOrc('negociacao')">🔵 Negociação</div>
+    <div class="subtab" data-os="fechado" onclick="filterOrc('fechado')">🟢 Fechado</div>
+    <div class="subtab" data-os="perdido" onclick="filterOrc('perdido')">🔴 Perdido</div>
+  </div>
+  <div id="orcList"></div>
+</div>
+<button class="btn-add" id="btnAddOrc" onclick="abrirNovoOrcamento()" style="display:none">+</button>
+
 <!-- ===== PRODUTOS / SABER ===== -->
 <div class="view" id="v-saber">
   <div class="view-title">Base de Conhecimento</div>
@@ -595,15 +611,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
   <div class="navbtn" data-v="consultor" onclick="nav('consultor')"><span class="ico">🤝</span><span class="lbl">Consultor</span></div>
   <div class="navbtn" data-v="aprender" onclick="nav('aprender')"><span class="ico">🎓</span><span class="lbl">Aprender</span></div>
   <div class="navbtn" data-v="clientes" onclick="nav('clientes')"><span class="ico">👥</span><span class="lbl">Clientes</span></div>
-</div>
-
-<!-- BOTTOM NAV -->
-<div class="bottomnav">
-  <div class="navbtn active" data-v="home" onclick="nav('home')"><span class="ico">🏠</span><span class="lbl">Início</span></div>
-  <div class="navbtn" data-v="calc" onclick="nav('calc')"><span class="ico">🧮</span><span class="lbl">Calcular</span></div>
-  <div class="navbtn" data-v="consultor" onclick="nav('consultor')"><span class="ico">🤝</span><span class="lbl">Consultor</span></div>
-  <div class="navbtn" data-v="aprender" onclick="nav('aprender')"><span class="ico">🎓</span><span class="lbl">Aprender</span></div>
-  <div class="navbtn" data-v="clientes" onclick="nav('clientes')"><span class="ico">👥</span><span class="lbl">Clientes</span></div>
+  <div class="navbtn" data-v="orcamentos" onclick="nav('orcamentos')"><span class="ico">📋</span><span class="lbl">Orçamentos</span></div>
 </div>
 
 <!-- VIEW CONFIG (abre via ícone ⚙️ no header) -->
@@ -656,6 +664,33 @@ input,select,textarea{font-family:inherit;font-size:15px}
     <input type="file" id="importFile" accept="application/json" style="display:none" onchange="importarDados(event)">
   </div>
 
+  <!-- BACKUP NA NUVEM -->
+  <div class="calc-box" style="margin-top:14px">
+    <h3>☁️ Backup automático na nuvem</h3>
+    <p style="font-size:13px;color:var(--cinza);margin-bottom:14px;line-height:1.5">
+      Sem isso, se você perder o celular, trocar de aparelho ou ele for roubado, os dados se perdem para sempre. Conectando, toda alteração é enviada automaticamente para sua conta gratuita do <b>JSONBin.io</b> — em qualquer aparelho novo, basta colar a key e o ID do backup para restaurar tudo.
+    </p>
+    <div id="cloudStatus" style="margin-bottom:10px"></div>
+    <div class="field">
+      <label>X-Master-Key (jsonbin.io → API Keys)</label>
+      <div style="display:flex;gap:8px">
+        <input type="password" id="cloudKeyInput" placeholder="$2a$10$..." style="flex:1;padding:12px 14px;border:2px solid var(--borda);border-radius:10px">
+        <button onclick="toggleVerCloudKey()" style="padding:10px 14px;background:var(--cinza-cl);border-radius:10px;font-size:16px" id="btnVerCloudKey">👁️</button>
+      </div>
+    </div>
+    <div class="field">
+      <label>ID do backup (preencha só ao restaurar em aparelho novo)</label>
+      <input id="cloudBinInput" placeholder="gerado automaticamente na 1ª conexão">
+    </div>
+    <button class="btn-calc" id="cloudConectarBtn" onclick="conectarNuvem()">🔗 Conectar backup na nuvem</button>
+    <button onclick="restaurarDaNuvem()" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verde);border-radius:12px;font-size:15px;font-weight:700">⬇️ Restaurar de um backup existente</button>
+    <div id="cloudConectadoBox" style="display:none">
+      <button class="btn-calc" style="margin-top:8px" onclick="sincronizarNuvem()">🔄 Sincronizar agora</button>
+      <button onclick="desconectarNuvem()" style="width:100%;margin-top:8px;padding:12px;border:2px solid #ffcdd2;border-radius:10px;color:var(--verm);font-size:13px;font-weight:700;background:#fff8f8">🔌 Desconectar deste aparelho</button>
+    </div>
+    <div class="disclaimer">O plano gratuito do JSONBin é mais que suficiente — o backup inteiro deste painel tem só alguns KB. Guarde a Master Key em local seguro: com ela é possível ler e alterar o backup.</div>
+  </div>
+
   <!-- INFO CUSTO -->
   <div class="calc-box" style="margin-top:14px">
     <h3>💰 Custo estimado de uso</h3>
@@ -697,7 +732,10 @@ function loadDB(){
 }
 function saveDB(){
   try{ localStorage.setItem('jmg_db', JSON.stringify(DB)); }catch(e){ console.warn('saveDB',e); }
+  try{ agendarSyncNuvem(); }catch(e){ console.warn('agendarSyncNuvem',e); }
 }
+let _cloudCfg = null;
+let _cloudSyncTimer = null;
 let DB = loadDB() || {
   clientes: [
     {id:1,nome:"Fazenda Santa Rita",loc:"Jataí/GO",tipo:"ambos",area:1200,cabecas:800,
@@ -709,11 +747,37 @@ let DB = loadDB() || {
     {id:3,nome:"Agropecuária Vale Verde",loc:"Sorriso/MT",tipo:"agri",area:2500,cabecas:0,
      compras:[],produtos:["Soja","Milho safrinha","Sorgo"]},
   ],
-  orcamentos:[{id:1,cliente:"Fazenda Santa Rita",status:"aberto"}],
+  orcamentos:[{id:1,clienteId:1,clienteNome:"Fazenda Santa Rita",
+    itens:[{produto:"Suplemento Proteico Max Ganho",qtd:1000,unidade:"kg",valorUnit:8.5}],
+    total:8500,status:"aberto",criadoEm:new Date().toISOString().slice(0,10),
+    validadeDias:7,obs:"",historico:[{data:new Date().toISOString().slice(0,10),texto:"Orçamento criado"}]}],
   visitas:{},
   learnStatus:{},
   quizScores:{},
 };
+function migrarDB(){
+  DB.clientes.forEach(c=>{
+    c.compras=c.compras||[]; c.produtos=c.produtos||[];
+    c.endereco=c.endereco||{rua:'',cidade:'',uf:'',cep:''};
+  });
+  DB.orcamentos=(DB.orcamentos||[]).map(o=>{
+    if(!o.itens){
+      const cli=DB.clientes.find(x=>x.nome===o.cliente);
+      return {
+        id:o.id||Date.now(),
+        clienteId:cli?cli.id:null,
+        clienteNome:o.cliente||cli?.nome||'(sem cliente)',
+        itens:[], total:0, status:o.status||'aberto',
+        criadoEm:o.criadoEm||new Date().toISOString().slice(0,10),
+        validadeDias:o.validadeDias||7, obs:o.obs||'',
+        historico:o.historico||[],
+      };
+    }
+    o.historico=o.historico||[];
+    return o;
+  });
+}
+migrarDB();
 saveDB();
 
 /* ---- NAV ---- */
@@ -722,6 +786,7 @@ function nav(v){
   document.getElementById('v-'+v).classList.add('active');
   document.querySelectorAll('.navbtn').forEach(x=>x.classList.toggle('active',x.dataset.v===v));
   document.getElementById('btnAddCli').style.display = (v==='clientes')?'flex':'none';
+  document.getElementById('btnAddOrc').style.display = (v==='orcamentos')?'flex':'none';
   window.scrollTo(0,0);
 }
 function goCalc(c){nav('calc');switchCalc(c);}
@@ -738,9 +803,11 @@ function initApp(){
   try{ renderKPIs(); }catch(e){ console.warn('KPIs',e); }
   try{ renderAlertas(); }catch(e){ console.warn('alertas',e); }
   try{ renderClientes(); }catch(e){ console.warn('clientes',e); }
+  try{ renderOrcamentos(); }catch(e){ console.warn('orcamentos',e); }
   try{ renderSaber(); }catch(e){ console.warn('saber',e); }
   try{ renderLearn(); }catch(e){ console.warn('learn',e); }
   try{ loadApiKey(); }catch(e){ console.warn('apikey',e); }
+  try{ initCloudUI(); }catch(e){ console.warn('cloud',e); }
   try{
     navigator.onLine ? setSync(true) : setSync(false);
     window.addEventListener('online',()=>setSync(true));
@@ -756,7 +823,7 @@ function setSync(on){
 /* ---- KPIs ---- */
 function renderKPIs(){
   document.getElementById('kpiClientes').textContent=DB.clientes.length;
-  document.getElementById('kpiOrc').textContent=DB.orcamentos.filter(o=>o.status==='aberto').length;
+  document.getElementById('kpiOrc').textContent=DB.orcamentos.filter(o=>o.status!=='fechado'&&o.status!=='perdido').length;
   document.getElementById('kpiVendas').textContent=formatBRL(vendasDoMes());
   document.getElementById('kpiAlertas').textContent=getAlertas().length;
 }
@@ -782,7 +849,7 @@ function getAlertas(){
       const fim=new Date(dataV.getTime()+diasDur*86400000);
       const diasRest=Math.round((fim-hoje)/86400000);
       if(diasRest<=15){
-        out.push({cliente:c.nome,prod:comp.prod,dias:diasRest,urgent:diasRest<=7});
+        out.push({clienteId:c.id,cliente:c.nome,prod:comp.prod,dias:diasRest,urgent:diasRest<=7});
       }
     });
   });
@@ -798,7 +865,7 @@ function renderAlertas(){
         <b>${a.cliente}</b>
         <div class="sub">${a.prod} acaba em <b>${a.dias} dia${a.dias!==1?'s':''}</b></div>
       </div>
-      <button class="alert-act" onclick="nav('clientes')">Orçar</button>
+      <button class="alert-act" onclick="abrirNovoOrcamento(null,${a.clienteId})">Orçar</button>
     </div>`).join('');
 }
 
@@ -951,15 +1018,28 @@ function abrirCli(id){
   const c=DB.clientes.find(x=>x.id===id);
   const compras=(c.compras||[]).slice().reverse().map(comp=>`<div class="result-line"><span>${comp.prod} (${comp.data})</span><b>${comp.qtd} kg${comp.valor?' · R$ '+Number(comp.valor).toLocaleString('pt-BR'):''}</b></div>`).join('')||'<div class="result-note">Sem compras registradas</div>';
   const prods=(c.produtos||[]).map(p=>`<span class="prod-tag tag-agua">${p}</span>`).join('');
+  const end=c.endereco||{};
+  const cadastro = (c.cpfCnpj||c.telefone||c.email||end.rua) ? `
+    <div class="prod-cat" style="margin-top:16px">Dados cadastrais</div>
+    <div class="result" style="display:block">
+      ${c.cpfCnpj?`<div class="result-line"><span>CPF/CNPJ</span><b>${c.cpfCnpj}</b></div>`:''}
+      ${c.telefone?`<div class="result-line"><span>Telefone</span><b>${c.telefone}</b></div>`:''}
+      ${c.email?`<div class="result-line"><span>E-mail</span><b>${c.email}</b></div>`:''}
+      ${end.rua?`<div class="result-line"><span>Endereço</span><b>${end.rua}${end.cidade?', '+end.cidade:''}${end.uf?'/'+end.uf:''}${end.cep?' · '+end.cep:''}</b></div>`:''}
+    </div>` : '<div class="result-note" style="margin-top:14px">Cadastre CPF/CNPJ, telefone e endereço em "Editar" — necessário para gerar PDFs de orçamento/pedido.</div>';
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
     <h2>${c.nome}</h2>
     <div class="cli-loc" style="margin-bottom:14px">📍 ${c.loc} · ${c.area} ha · ${c.cabecas} cabeças</div>
     <div class="prod-cat">Produtos que compra</div>
     <div>${prods||'—'}</div>
+    ${cadastro}
     <div class="prod-cat" style="margin-top:16px">Histórico de compras</div>
     <div class="result" style="display:block">${compras}</div>
-    <button class="btn-calc" style="margin-top:16px" onclick="abrirFormCompra(${c.id})">🛍️ Registrar compra</button>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn-calc" style="flex:1" onclick="abrirFormCompra(${c.id})">🛍️ Registrar compra</button>
+      <button class="btn-calc" style="flex:1;background:var(--cinza-cl);color:var(--verde)" onclick="abrirNovoOrcamento(null,${c.id})">📋 Criar orçamento</button>
+    </div>
     <div style="display:flex;gap:8px;margin-top:8px">
       <button class="btn-calc" style="flex:1;background:var(--cinza-cl);color:var(--verde)" onclick="abrirNovoCli(${c.id})">✏️ Editar</button>
       <button style="flex:1;padding:14px;background:#fff8f8;color:var(--verm);border:2px solid #ffcdd2;border-radius:12px;font-weight:700" onclick="excluirCli(${c.id})">🗑️ Excluir</button>
@@ -968,6 +1048,7 @@ function abrirCli(id){
 }
 function abrirNovoCli(editId){
   const c = editId ? DB.clientes.find(x=>x.id===editId) : null;
+  const end = c?.endereco || {};
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
     <h2>${c?'Editar cliente':'Novo cliente'}</h2>
@@ -979,6 +1060,20 @@ function abrirNovoCli(editId){
       <option value="ambos" ${!c||c.tipo==='ambos'?'selected':''}>Agrícola + Pecuária</option>
     </select></div>
     <div class="row2"><div class="field"><label>Hectares</label><input type="number" id="nc_area" value="${c?c.area:''}"></div><div class="field"><label>Cabeças</label><input type="number" id="nc_cab" value="${c?c.cabecas:''}"></div></div>
+
+    <div class="prod-cat" style="margin-top:4px">Dados cadastrais <span style="text-transform:none;font-weight:500">(para documentos/PDF)</span></div>
+    <div class="field"><label>CPF/CNPJ</label><input id="nc_doc" placeholder="000.000.000-00 ou 00.000.000/0000-00" value="${c?.cpfCnpj||''}"></div>
+    <div class="row2">
+      <div class="field"><label>Telefone (WhatsApp)</label><input id="nc_fone" placeholder="(64) 99999-9999" value="${c?.telefone||''}"></div>
+      <div class="field"><label>E-mail</label><input type="email" id="nc_email" placeholder="opcional" value="${c?.email||''}"></div>
+    </div>
+    <div class="field"><label>Endereço (rua, número, complemento)</label><input id="nc_end_rua" placeholder="ex: Rod. BR-364, km 12, s/n, Zona Rural" value="${end.rua||''}"></div>
+    <div class="row2">
+      <div class="field"><label>Cidade</label><input id="nc_end_cidade" value="${end.cidade||''}"></div>
+      <div class="field"><label>UF</label><input id="nc_end_uf" maxlength="2" style="text-transform:uppercase" value="${end.uf||''}"></div>
+    </div>
+    <div class="field"><label>CEP</label><input id="nc_end_cep" placeholder="00000-000" value="${end.cep||''}"></div>
+
     <button class="btn-calc" onclick="salvarCli(${editId||''})">${c?'Salvar alterações':'Salvar cliente'}</button>
   `);
 }
@@ -987,7 +1082,16 @@ function salvarCli(editId){
   if(!nome){alert('Informe o nome');return;}
   const dados={nome,loc:document.getElementById('nc_loc').value,
     tipo:document.getElementById('nc_tipo').value,area:+document.getElementById('nc_area').value||0,
-    cabecas:+document.getElementById('nc_cab').value||0};
+    cabecas:+document.getElementById('nc_cab').value||0,
+    cpfCnpj:document.getElementById('nc_doc').value.trim(),
+    telefone:document.getElementById('nc_fone').value.trim(),
+    email:document.getElementById('nc_email').value.trim(),
+    endereco:{
+      rua:document.getElementById('nc_end_rua').value.trim(),
+      cidade:document.getElementById('nc_end_cidade').value.trim(),
+      uf:document.getElementById('nc_end_uf').value.trim().toUpperCase(),
+      cep:document.getElementById('nc_end_cep').value.trim(),
+    }};
   if(editId){
     const c=DB.clientes.find(x=>x.id===editId);
     Object.assign(c,dados);
@@ -1038,6 +1142,256 @@ function salvarCompra(clienteId){
   c.produtos=c.produtos||[];
   if(!c.produtos.includes(prod)) c.produtos.push(prod);
   saveDB();renderAlertas();renderKPIs();abrirCli(clienteId);
+}
+
+/* ============================================================
+   ORÇAMENTOS — acompanhar, cobrar e gerar PDF
+============================================================ */
+let _orcFiltro='todos';
+let _orcDraft=null;
+
+function filterOrc(f){
+  _orcFiltro=f;
+  document.querySelectorAll('#orcTabs .subtab').forEach(t=>t.classList.toggle('active',t.dataset.os===f));
+  renderOrcamentos();
+}
+function renderOrcamentos(){
+  const box=document.getElementById('orcList');
+  if(!box) return;
+  let list=DB.orcamentos.slice().sort((a,b)=>(b.id||0)-(a.id||0));
+  if(_orcFiltro!=='todos') list=list.filter(o=>o.status===_orcFiltro);
+  if(!list.length){box.innerHTML='<div class="empty"><div class="empty-ico">📋</div>Nenhum orçamento aqui. Toque no + para criar.</div>';return;}
+  const statusLbl={aberto:['🟡 Aberto','st-novo'],negociacao:['🔵 Negociação','st-estudando'],fechado:['🟢 Fechado','st-dominado'],perdido:['🔴 Perdido','st-novo']};
+  box.innerHTML=list.map(o=>{
+    const[sl,sc]=statusLbl[o.status]||statusLbl.aberto;
+    return `<div class="cli-card" onclick="abrirOrcamento(${o.id})">
+      <div class="cli-top">
+        <div><div class="cli-nome">${o.clienteNome||'(sem cliente)'}</div><div class="cli-loc">📅 ${o.criadoEm||''}</div></div>
+        <div class="lc-status ${sc}">${sl}</div>
+      </div>
+      <div class="cli-stats">
+        <div class="cli-stat"><div class="n">${formatBRL(o.total||0)}</div><div class="l">total</div></div>
+        <div class="cli-stat"><div class="n">${(o.itens||[]).length}</div><div class="l">itens</div></div>
+        <div class="cli-stat"><div class="n">${(o.historico||[]).length}</div><div class="l">contatos</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function abrirNovoOrcamento(editId, presetClienteId){
+  const o = editId ? DB.orcamentos.find(x=>x.id===editId) : null;
+  _orcDraft = o ? JSON.parse(JSON.stringify(o)) : {id:null, clienteId:presetClienteId||null, itens:[], validadeDias:7, obs:'', status:'aberto', historico:[]};
+  renderFormOrcamento();
+}
+function renderFormOrcamento(){
+  const editId=_orcDraft.id;
+  const opcoesCli=DB.clientes.map(c=>`<option value="${c.id}" ${_orcDraft.clienteId===c.id?'selected':''}>${c.nome}</option>`).join('');
+  const itensHtml=_orcDraft.itens.map((it,i)=>`
+    <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.valorUnit)} <button onclick="removerItemOrc(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('') || '<div class="result-note">Nenhum item adicionado ainda</div>';
+  const total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
+  modal(`
+    <button class="modal-x" onclick="fecharModal()">✕</button>
+    <h2>${editId?'Editar orçamento':'Novo orçamento'}</h2>
+    <div class="field"><label>Cliente</label><select id="orc_cliente">
+      <option value="">Selecione...</option>${opcoesCli}
+    </select></div>
+    <div class="prod-cat" style="margin-top:14px">Itens</div>
+    <div class="result" style="display:block">${itensHtml}</div>
+    <div class="row2" style="margin-top:10px">
+      <div class="field"><label>Produto</label><input id="oi_prod" placeholder="ex: Suplemento Proteico"></div>
+      <div class="field"><label>Qtd</label><input type="number" id="oi_qtd" placeholder="0"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Unidade</label><select id="oi_un"><option value="kg">kg</option><option value="sc">sc</option><option value="un">un</option><option value="L">L</option></select></div>
+      <div class="field"><label>Valor unit. (R$)</label><input type="number" id="oi_valor" placeholder="0"></div>
+    </div>
+    <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde)" onclick="adicionarItemOrc()">➕ Adicionar item</button>
+    <div class="result-line" style="margin-top:14px;font-size:16px"><span>Total</span><b>${formatBRL(total)}</b></div>
+    <div class="field" style="margin-top:14px"><label>Validade (dias)</label><input type="number" id="orc_validade" value="${_orcDraft.validadeDias||7}"></div>
+    <div class="field"><label>Observações</label><textarea id="orc_obs" placeholder="condições de pagamento, frete, etc.">${_orcDraft.obs||''}</textarea></div>
+    <button class="btn-calc" onclick="salvarOrcamento()">${editId?'Salvar alterações':'Criar orçamento'}</button>
+  `);
+}
+function _syncDraftCampos(){
+  const cliSel=document.getElementById('orc_cliente');
+  if(cliSel && cliSel.value) _orcDraft.clienteId=+cliSel.value;
+  const val=document.getElementById('orc_validade');
+  if(val) _orcDraft.validadeDias=+val.value||_orcDraft.validadeDias;
+  const obs=document.getElementById('orc_obs');
+  if(obs) _orcDraft.obs=obs.value;
+}
+function adicionarItemOrc(){
+  const produto=document.getElementById('oi_prod').value.trim();
+  const qtd=+document.getElementById('oi_qtd').value||0;
+  const unidade=document.getElementById('oi_un').value;
+  const valorUnit=+document.getElementById('oi_valor').value||0;
+  if(!produto||!qtd){alert('Informe produto e quantidade');return;}
+  _syncDraftCampos();
+  _orcDraft.itens.push({produto,qtd,unidade,valorUnit});
+  renderFormOrcamento();
+}
+function removerItemOrc(i){
+  _syncDraftCampos();
+  _orcDraft.itens.splice(i,1);
+  renderFormOrcamento();
+}
+function salvarOrcamento(){
+  _syncDraftCampos();
+  if(!_orcDraft.clienteId){alert('Selecione um cliente');return;}
+  if(!_orcDraft.itens.length){alert('Adicione ao menos um item');return;}
+  const cliente=DB.clientes.find(x=>x.id===_orcDraft.clienteId);
+  _orcDraft.clienteNome=cliente?cliente.nome:'(cliente removido)';
+  _orcDraft.total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
+  if(_orcDraft.id){
+    const idx=DB.orcamentos.findIndex(x=>x.id===_orcDraft.id);
+    DB.orcamentos[idx]=_orcDraft;
+  } else {
+    _orcDraft.id=Date.now();
+    _orcDraft.criadoEm=new Date().toISOString().slice(0,10);
+    _orcDraft.historico=[{data:_orcDraft.criadoEm,texto:'Orçamento criado'}];
+    DB.orcamentos.push(_orcDraft);
+  }
+  saveDB();fecharModal();renderOrcamentos();renderKPIs();
+  _orcDraft=null;
+}
+function abrirOrcamento(id){
+  const o=DB.orcamentos.find(x=>x.id===id);
+  if(!o) return;
+  const itensHtml=(o.itens||[]).map(it=>`<div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.valorUnit)}</b></div>`).join('')||'<div class="result-note">Sem itens</div>';
+  const histHtml=(o.historico||[]).slice().reverse().map(h=>`<div class="result-line"><span>${h.data}</span><b>${h.texto}</b></div>`).join('')||'<div class="result-note">Sem acompanhamento ainda</div>';
+  modal(`
+    <button class="modal-x" onclick="fecharModal()">✕</button>
+    <h2>${o.clienteNome}</h2>
+    <div class="cli-loc" style="margin-bottom:10px">Criado em ${o.criadoEm} · válido por ${o.validadeDias||7} dias</div>
+    <select id="orc_status_sel" onchange="mudarStatusOrc(${o.id},this.value)" style="width:100%;padding:10px;border:2px solid var(--borda);border-radius:10px;margin-bottom:14px;font-weight:700">
+      <option value="aberto" ${o.status==='aberto'?'selected':''}>🟡 Aberto</option>
+      <option value="negociacao" ${o.status==='negociacao'?'selected':''}>🔵 Em negociação</option>
+      <option value="fechado" ${o.status==='fechado'?'selected':''}>🟢 Fechado (venda concluída)</option>
+      <option value="perdido" ${o.status==='perdido'?'selected':''}>🔴 Perdido</option>
+    </select>
+    <div class="prod-cat">Itens</div>
+    <div class="result" style="display:block">${itensHtml}</div>
+    <div class="result-line" style="margin-top:10px;font-size:16px"><span>Total</span><b>${formatBRL(o.total||0)}</b></div>
+    ${o.obs?`<div class="result-note" style="margin-top:10px">${o.obs}</div>`:''}
+
+    <div class="prod-cat" style="margin-top:18px">Acompanhamento</div>
+    <div class="result" style="display:block;max-height:160px;overflow:auto">${histHtml}</div>
+    <div class="field" style="margin-top:10px"><input id="orc_nota" placeholder="ex: cliente pediu prazo até dia 25..."></div>
+    <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde)" onclick="registrarAcompanhamento(${o.id})">📝 Registrar acompanhamento</button>
+
+    <button class="btn-calc" style="margin-top:16px" onclick="cobrarWhatsapp(${o.id})">💬 Cobrar no WhatsApp</button>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn-calc" style="flex:1;background:var(--cinza-cl);color:var(--verde)" onclick="gerarPDF(${o.id},'orcamento')">📄 PDF Orçamento</button>
+      <button class="btn-calc" style="flex:1;background:var(--cinza-cl);color:var(--verde)" onclick="gerarPDF(${o.id},'pedido')">📄 PDF Pedido</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="btn-calc" style="flex:1;background:var(--cinza-cl);color:var(--verde)" onclick="abrirNovoOrcamento(${o.id})">✏️ Editar</button>
+      <button style="flex:1;padding:14px;background:#fff8f8;color:var(--verm);border:2px solid #ffcdd2;border-radius:12px;font-weight:700" onclick="excluirOrcamento(${o.id})">🗑️ Excluir</button>
+    </div>
+  `);
+}
+function mudarStatusOrc(id,status){
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  o.status=status;
+  o.historico=o.historico||[];
+  const lbl={aberto:'Aberto',negociacao:'Em negociação',fechado:'Fechado (venda concluída)',perdido:'Perdido'}[status]||status;
+  o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Status alterado para: '+lbl});
+  saveDB();renderOrcamentos();renderKPIs();
+}
+function registrarAcompanhamento(id){
+  const inp=document.getElementById('orc_nota');
+  const txt=inp.value.trim();
+  if(!txt) return;
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  o.historico=o.historico||[];
+  o.historico.push({data:new Date().toISOString().slice(0,10),texto:txt});
+  saveDB();abrirOrcamento(id);
+}
+function excluirOrcamento(id){
+  if(!confirm('Excluir este orçamento? Essa ação não pode ser desfeita.'))return;
+  DB.orcamentos=DB.orcamentos.filter(x=>x.id!==id);
+  saveDB();fecharModal();renderOrcamentos();renderKPIs();
+}
+function telWhats(fone){
+  let d=(fone||'').replace(/\D/g,'');
+  if(!d) return '';
+  if(!d.startsWith('55')) d='55'+d;
+  return d;
+}
+function cobrarWhatsapp(id){
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  const c=DB.clientes.find(x=>x.id===o.clienteId);
+  const fone=telWhats(c?.telefone);
+  if(!fone){alert('Cadastre o telefone do cliente (em Clientes → Editar) para usar essa opção.');return;}
+  const primeiroNome=(c.nome||'').split(' ')[0]||c.nome;
+  const msg=`Olá ${primeiroNome}! Passando para saber se já conseguiu avaliar o orçamento que te enviei (total ${formatBRL(o.total||0)}). Posso ajudar com alguma dúvida ou já fechar o pedido?`;
+  window.open(`https://wa.me/${fone}?text=${encodeURIComponent(msg)}`,'_blank');
+}
+
+/* ---- GERAÇÃO DE PDF (orçamento / pedido) — usa jsPDF via CDN ---- */
+function gerarPDF(orcId, tipo){
+  if(typeof window.jspdf==='undefined'){
+    alert('Gerador de PDF ainda não carregou. Verifique sua conexão com a internet e tente novamente em alguns segundos.');
+    return;
+  }
+  const o=DB.orcamentos.find(x=>x.id===orcId); if(!o) return;
+  const c=DB.clientes.find(x=>x.id===o.clienteId);
+  const { jsPDF }=window.jspdf;
+  const doc=new jsPDF();
+  const titulo=tipo==='pedido'?'PEDIDO':'ORÇAMENTO';
+  let y=20;
+  doc.setFontSize(18); doc.setTextColor(54,124,43);
+  doc.text('JMG Agropastoril', 14, y); y+=6;
+  doc.setFontSize(11); doc.setTextColor(100);
+  doc.text('Consultoria · Representação comercial', 14, y); y+=10;
+  doc.setDrawColor(54,124,43); doc.line(14,y,196,y); y+=10;
+
+  doc.setFontSize(14); doc.setTextColor(30,74,24);
+  doc.text(`${titulo} Nº ${o.id}`, 14, y); y+=8;
+  doc.setFontSize(10); doc.setTextColor(80);
+  doc.text(`Data: ${new Date(o.criadoEm||Date.now()).toLocaleDateString('pt-BR')}`, 14, y);
+  doc.text(`Válido por: ${o.validadeDias||7} dias`, 120, y); y+=10;
+
+  doc.setFontSize(11); doc.setTextColor(30,74,24);
+  doc.text('Cliente', 14, y); y+=6;
+  doc.setFontSize(10); doc.setTextColor(40);
+  doc.text(`${c?.nome||o.clienteNome||'-'}`, 14, y); y+=5;
+  if(c?.cpfCnpj){ doc.text(`CPF/CNPJ: ${c.cpfCnpj}`, 14, y); y+=5; }
+  if(c?.endereco?.rua){ doc.text(`Endereço: ${c.endereco.rua}${c.endereco.cidade?', '+c.endereco.cidade:''}${c.endereco.uf?'/'+c.endereco.uf:''}${c.endereco.cep?' - CEP '+c.endereco.cep:''}`, 14, y); y+=5; }
+  if(c?.telefone){ doc.text(`Telefone: ${c.telefone}`, 14, y); y+=5; }
+  if(c?.email){ doc.text(`E-mail: ${c.email}`, 14, y); y+=5; }
+  y+=5;
+
+  doc.setFontSize(11); doc.setTextColor(30,74,24);
+  doc.text('Itens', 14, y); y+=8;
+  doc.setFontSize(9); doc.setTextColor(255); doc.setFillColor(54,124,43);
+  doc.rect(14, y-5, 182, 7, 'F');
+  doc.text('Produto', 16, y); doc.text('Qtd', 110, y); doc.text('Unid.', 130, y); doc.text('Valor unit.', 150, y); doc.text('Subtotal', 178, y);
+  y+=7;
+  doc.setTextColor(40);
+  (o.itens||[]).forEach(it=>{
+    if(y>270){ doc.addPage(); y=20; }
+    doc.text(String(it.produto).slice(0,45), 16, y);
+    doc.text(String(it.qtd), 110, y);
+    doc.text(String(it.unidade), 130, y);
+    doc.text(formatBRL(it.valorUnit), 150, y);
+    doc.text(formatBRL(it.qtd*it.valorUnit), 178, y);
+    y+=7;
+  });
+  y+=4; doc.setDrawColor(200); doc.line(14,y,196,y); y+=8;
+  doc.setFontSize(13); doc.setTextColor(30,74,24);
+  doc.text(`Total: ${formatBRL(o.total||0)}`, 140, y); y+=12;
+
+  if(o.obs){
+    doc.setFontSize(10); doc.setTextColor(80);
+    doc.text('Observações:', 14, y); y+=5;
+    const linhas=doc.splitTextToSize(o.obs, 180);
+    doc.text(linhas, 14, y);
+  }
+
+  doc.setFontSize(9); doc.setTextColor(120);
+  doc.text('Documento gerado pelo Painel do Representante — JMG Agropastoril', 14, 285);
+
+  doc.save(`${tipo}-${(c?.nome||'cliente').replace(/[^a-zA-Z0-9]+/g,'-')}-${o.id}.pdf`);
 }
 
 /* ============================================================
@@ -1483,6 +1837,141 @@ function atualizarStatusKey(){
     if(label) label.innerHTML='<span style="color:var(--laranja)">⚠️ Sem API Key</span>';
     if(box) box.innerHTML='<div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:12px;padding:12px 14px;font-size:13px;color:var(--laranja);font-weight:700;text-align:center">⚠️ Chat indisponível — configure a API Key abaixo para ativar</div>';
   }
+}
+
+/* ---- BACKUP NA NUVEM (JSONBin) ---- */
+function loadCloudCfg(){
+  try{ _cloudCfg = JSON.parse(localStorage.getItem('jmg_cloud_cfg')) || null; }catch(e){ _cloudCfg = null; }
+  return _cloudCfg;
+}
+function saveCloudCfg(cfg){
+  _cloudCfg = cfg;
+  if(cfg) localStorage.setItem('jmg_cloud_cfg', JSON.stringify(cfg));
+  else localStorage.removeItem('jmg_cloud_cfg');
+}
+function initCloudUI(){
+  loadCloudCfg();
+  if(_cloudCfg){
+    document.getElementById('cloudKeyInput').value = _cloudCfg.key || '';
+    document.getElementById('cloudBinInput').value = _cloudCfg.binId || '';
+  }
+  atualizarStatusNuvem();
+}
+function toggleVerCloudKey(){
+  const inp = document.getElementById('cloudKeyInput');
+  inp.type = inp.type==='password' ? 'text' : 'password';
+  document.getElementById('btnVerCloudKey').textContent = inp.type==='password' ? '👁️' : '🙈';
+}
+function atualizarStatusNuvem(msgExtra){
+  const box = document.getElementById('cloudStatus');
+  const btnConectar = document.getElementById('cloudConectarBtn');
+  const boxConectado = document.getElementById('cloudConectadoBox');
+  if(!box) return;
+  if(_cloudCfg && _cloudCfg.binId){
+    box.innerHTML = '<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:12px;padding:12px 14px;font-size:13px;color:var(--verde);font-weight:700;text-align:center">✅ Backup conectado'+(msgExtra?(' — '+msgExtra):'')+'</div>';
+    if(btnConectar) btnConectar.style.display='none';
+    if(boxConectado) boxConectado.style.display='block';
+  } else {
+    box.innerHTML = '<div style="background:#fff3e0;border:1px solid #ffe0b2;border-radius:12px;padding:12px 14px;font-size:13px;color:var(--laranja);font-weight:700;text-align:center">⚠️ Backup na nuvem não conectado'+(msgExtra?(' — '+msgExtra):'')+'</div>';
+    if(btnConectar) btnConectar.style.display='block';
+    if(boxConectado) boxConectado.style.display='none';
+  }
+}
+async function conectarNuvem(){
+  const key = document.getElementById('cloudKeyInput').value.trim();
+  const binId = document.getElementById('cloudBinInput').value.trim();
+  if(!key){ alert('Cole sua X-Master-Key do jsonbin.io primeiro.'); return; }
+  const btn = document.getElementById('cloudConectarBtn');
+  btn.textContent = '⏳ Conectando...'; btn.disabled = true;
+  try{
+    if(binId){
+      saveCloudCfg({key, binId});
+      await sincronizarNuvem(true);
+      atualizarStatusNuvem('sincronizado agora');
+    } else {
+      const resp = await fetch('https://api.jsonbin.io/v3/b', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'X-Master-Key': key,
+          'X-Bin-Name': 'jmg-painel-backup'
+        },
+        body: JSON.stringify(DB)
+      });
+      if(!resp.ok) throw new Error('Falha ao criar backup ('+resp.status+')');
+      const data = await resp.json();
+      const novoBinId = data.metadata.id;
+      saveCloudCfg({key, binId: novoBinId});
+      document.getElementById('cloudBinInput').value = novoBinId;
+      atualizarStatusNuvem('backup criado');
+      alert('✅ Backup na nuvem criado! Guarde a Master Key — você vai precisar dela para restaurar em outro aparelho.');
+    }
+  }catch(e){
+    console.warn('conectarNuvem', e);
+    alert('❌ Não foi possível conectar: ' + e.message);
+    atualizarStatusNuvem();
+  }
+  btn.textContent = '🔗 Conectar backup na nuvem'; btn.disabled = false;
+}
+async function sincronizarNuvem(silencioso){
+  if(!_cloudCfg || !_cloudCfg.binId || !_cloudCfg.key){
+    if(!silencioso) alert('Conecte o backup na nuvem primeiro.');
+    return;
+  }
+  try{
+    const resp = await fetch('https://api.jsonbin.io/v3/b/'+_cloudCfg.binId, {
+      method:'PUT',
+      headers:{
+        'Content-Type':'application/json',
+        'X-Master-Key': _cloudCfg.key
+      },
+      body: JSON.stringify(DB)
+    });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    atualizarStatusNuvem('sincronizado às '+new Date().toLocaleTimeString('pt-BR').slice(0,5));
+    if(!silencioso) alert('✅ Sincronizado com sucesso!');
+  }catch(e){
+    console.warn('sincronizarNuvem', e);
+    atualizarStatusNuvem('falha ao sincronizar');
+    if(!silencioso) alert('❌ Falha ao sincronizar: ' + e.message);
+  }
+}
+function agendarSyncNuvem(){
+  if(!_cloudCfg || !_cloudCfg.binId) return;
+  clearTimeout(_cloudSyncTimer);
+  _cloudSyncTimer = setTimeout(()=>{ sincronizarNuvem(true); }, 3000);
+}
+async function restaurarDaNuvem(){
+  const key = document.getElementById('cloudKeyInput').value.trim();
+  const binId = document.getElementById('cloudBinInput').value.trim();
+  if(!key || !binId){ alert('Preencha a X-Master-Key e o ID do backup para restaurar.'); return; }
+  if(!confirm('Isso vai substituir todos os dados deste aparelho pelos dados do backup na nuvem. Continuar?')) return;
+  try{
+    const resp = await fetch('https://api.jsonbin.io/v3/b/'+binId+'/latest', {
+      headers:{ 'X-Master-Key': key }
+    });
+    if(!resp.ok) throw new Error('HTTP '+resp.status);
+    const data = await resp.json();
+    const novo = data.record;
+    if(!Array.isArray(novo.clientes)) throw new Error('formato inválido no backup');
+    DB = novo;
+    saveCloudCfg({key, binId});
+    saveDB();
+    renderKPIs(); renderAlertas(); renderClientes(); renderLearn();
+    try{ renderOrcamentos(); }catch(e){}
+    atualizarStatusNuvem('restaurado agora');
+    alert('✅ Dados restaurados com sucesso!');
+  }catch(e){
+    console.warn('restaurarDaNuvem', e);
+    alert('❌ Falha ao restaurar: ' + e.message);
+  }
+}
+function desconectarNuvem(){
+  if(!confirm('Desconectar o backup na nuvem deste aparelho? Seus dados locais não serão apagados, mas pararão de sincronizar automaticamente.')) return;
+  saveCloudCfg(null);
+  document.getElementById('cloudKeyInput').value='';
+  document.getElementById('cloudBinInput').value='';
+  atualizarStatusNuvem();
 }
 
 /* ---- MODAL ---- */
