@@ -1499,13 +1499,22 @@ function addItemRapido(){
   renderRapidoItens();
 }
 function removerItemRapido(i){ _rapidoItens.splice(i,1); renderRapidoItens(); }
+function editarItemRapido(i){
+  const it=_rapidoItens[i]; if(!it) return;
+  _rapidoItens.splice(i,1);
+  renderRapidoItens();
+  document.getElementById('rp_prod').value=it.produto;
+  document.getElementById('rp_qtd').value=it.qtd;
+  document.getElementById('rp_un').value=it.unidade;
+  document.getElementById('rp_preco').value=it.preco;
+}
 function renderRapidoItens(){
   const box = document.getElementById('rapidoItensBox');
   if(!box) return;
   if(!_rapidoItens.length){ box.innerHTML='<div class="result-note">Nenhum item adicionado ainda</div>'; return; }
   const total = _rapidoItens.reduce((s,it)=>s+it.qtd*it.preco,0);
   box.innerHTML = _rapidoItens.map((it,i)=>`
-    <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.preco)} <button onclick="removerItemRapido(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('')
+    <div class="result-line" style="cursor:pointer" title="Toque para editar este item" onclick="editarItemRapido(${i})"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.preco)} <button onclick="event.stopPropagation();removerItemRapido(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('')
     + `<div class="result-line" style="margin-top:6px;font-size:16px"><span>Subtotal</span><b>${formatBRL(total)}</b></div>`;
   atualizarPreviaFreteRapido();
 }
