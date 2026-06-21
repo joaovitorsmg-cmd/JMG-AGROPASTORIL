@@ -17,6 +17,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <script src="./produtos-base.js" defer></script>
+<script src="./municipios-base.js" defer></script>
 <style>
 :root{
   --verde:#367C2B; --verde-esc:#1E4A18; --verde-cl:#EAF4E7;
@@ -846,10 +847,20 @@ let DB = loadDB() || {
   quizScores:{},
   listaPrecos:[],
 };
+function criarFazendaPrimariaDeFlat(c){
+  const end=Object.assign({rua:'',numero:'',bairro:'',complemento:'',cidade:'',uf:'',cep:''},c.endereco||{});
+  if(!end.cidade && !end.uf && c.loc && c.loc.includes('/')){
+    const partes=c.loc.split('/');
+    end.cidade=(partes[0]||'').trim();
+    end.uf=(partes[1]||'').trim().toUpperCase();
+  }
+  return [{id:Date.now()+Math.floor(Math.random()*1000), nome:c.nome||'Fazenda', tipo:c.tipo||'ambos', area:c.area||0, cabecas:c.cabecas||0, endereco:end}];
+}
 function migrarDB(){
   DB.clientes.forEach(c=>{
     c.compras=c.compras||[]; c.produtos=c.produtos||[];
     c.endereco=c.endereco||{rua:'',cidade:'',uf:'',cep:''};
+    if(!c.fazendas || !c.fazendas.length) c.fazendas=criarFazendaPrimariaDeFlat(c);
   });
   DB.listaPrecos=DB.listaPrecos||[];
   DB.orcamentos=(DB.orcamentos||[]).map(o=>{
@@ -1235,6 +1246,87 @@ function unidadeSugeridaProduto(p){
 function fecharAutocompleteProduto(boxId){
   setTimeout(()=>{ const box=document.getElementById(boxId); if(box){ box.innerHTML=''; box.style.display='none'; } },150);
 }
+/* ============================================================
+   GEOGRAFIA — UF (lista suspensa) e Município (busca, igual à
+   autocompletar de produtos) a partir da base offline UF_MUNICIPIOS
+============================================================ */
+function listaUfOptions(selecionado){
+  if(typeof UF_MUNICIPIOS === 'undefined') return '';
+  return Object.keys(UF_MUNICIPIOS).sort().map(sigla=>
+    `<option value="${sigla}" ${selecionado===sigla?'selected':''}>${sigla} — ${UF_MUNICIPIOS[sigla].nome}</option>`
+  ).join('');
+}
+function buscarMunicipios(uf,q,limite){
+  limite=limite||20;
+  if(typeof UF_MUNICIPIOS==='undefined') return [];
+  const ufData=UF_MUNICIPIOS[uf];
+  if(!ufData) return [];
+  const nq=normalizarHeader(q);
+  let out=ufData.cidades;
+  if(nq.length>0){
+    out=out.filter(nome=>normalizarHeader(nome).includes(nq));
+    out=out.slice().sort((a,b)=>{
+      const an=normalizarHeader(a), bn=normalizarHeader(b);
+      const aStarts=an.startsWith(nq)?0:1, bStarts=bn.startsWith(nq)?0:1;
+      if(aStarts!==bStarts) return aStarts-bStarts;
+      return an.length-bn.length;
+    });
+  }
+  return out.slice(0,limite);
+}
+function municipioAutocomplete(inputId,boxId,ufId){
+  const input=document.getElementById(inputId);
+  const box=document.getElementById(boxId);
+  const ufSel=document.getElementById(ufId);
+  if(!input||!box) return;
+  const uf=ufSel?ufSel.value:'';
+  if(!uf){ box.innerHTML='<div class="autoc-item" style="color:var(--cinza)">Selecione o estado (UF) primeiro</div>'; box.style.display='block'; return; }
+  const resultados=buscarMunicipios(uf,input.value,20);
+  if(!resultados.length){ box.innerHTML=''; box.style.display='none'; return; }
+  box._resultados=resultados;
+  box.innerHTML=resultados.map((nome,i)=>`<div class="autoc-item" onclick="selecionarMunicipioAutocomplete('${inputId}','${boxId}',${i})">${nome}</div>`).join('');
+  box.style.display='block';
+}
+function selecionarMunicipioAutocomplete(inputId,boxId,idx){
+  const box=document.getElementById(boxId);
+  const nome=box._resultados && box._resultados[idx];
+  if(!nome) return;
+  const input=document.getElementById(inputId);
+  input.value=nome;
+  box.innerHTML=''; box.style.display='none';
+}
+function fecharAutocompleteCidade(boxId){
+  setTimeout(()=>{ const box=document.getElementById(boxId); if(box){ box.innerHTML=''; box.style.display='none'; } },150);
+}
+function formatEndereco(end){
+  if(!end) return '';
+  const linha1=[end.rua,end.numero].filter(Boolean).join(', ');
+  const linha2=[end.bairro,end.complemento].filter(Boolean).join(' - ');
+  const linha3=[end.cidade,end.uf].filter(Boolean).join('/');
+  return [linha1,linha2,linha3,end.cep?'CEP '+end.cep:''].filter(Boolean).join(' · ');
+}
+/* ---- CEP (ViaCEP) — autopreenche rua/bairro/cidade/UF; se não achar, tudo continua editável manualmente ---- */
+function onCepFazendaInput(i){
+  const el=document.getElementById('fz_cep_'+i);
+  if(!el) return;
+  const digitos=el.value.replace(/\D/g,'');
+  if(digitos.length===8) buscarCEPFazenda(i,digitos);
+}
+function buscarCEPFazenda(i,cep){
+  const statusEl=document.getElementById('fz_cepStatus_'+i);
+  if(statusEl) statusEl.textContent='🔎 Buscando CEP...';
+  fetch(`https://viacep.com.br/ws/${cep}/json/`)
+    .then(r=>r.json())
+    .then(data=>{
+      if(data.erro){ if(statusEl) statusEl.textContent='⚠️ CEP não encontrado — preencha manualmente.'; return; }
+      const ruaEl=document.getElementById('fz_rua_'+i); if(ruaEl && data.logradouro) ruaEl.value=data.logradouro;
+      const bairroEl=document.getElementById('fz_bairro_'+i); if(bairroEl && data.bairro) bairroEl.value=data.bairro;
+      const ufEl=document.getElementById('fz_uf_'+i); if(ufEl && data.uf) ufEl.value=data.uf;
+      const cidadeEl=document.getElementById('fz_cidade_'+i); if(cidadeEl && data.localidade) cidadeEl.value=data.localidade;
+      if(statusEl) statusEl.textContent='✅ Endereço preenchido — confira o número.';
+    })
+    .catch(()=>{ if(statusEl) statusEl.textContent='⚠️ Sem conexão para buscar o CEP — preencha manualmente.'; });
+}
 function parsePrecoCelula(v){
   if(v===null || v===undefined || v==='') return 0;
   if(typeof v === 'number') return v;
@@ -1461,15 +1553,16 @@ function enviarRapidoParaFormal(){
 ============================================================ */
 function renderClientes(){
   const q=(document.getElementById('cliSearch').value||'').toLowerCase();
-  const list=DB.clientes.filter(c=>c.nome.toLowerCase().includes(q)||c.loc.toLowerCase().includes(q));
+  const list=DB.clientes.filter(c=>c.nome.toLowerCase().includes(q)||c.loc.toLowerCase().includes(q)||(c.fazendas||[]).some(f=>(f.nome||'').toLowerCase().includes(q)));
   const box=document.getElementById('cliList');
   if(!list.length){box.innerHTML='<div class="empty"><div class="empty-ico">👥</div>Nenhum cliente. Toque no + para adicionar.</div>';return;}
   const tipoLbl={agri:['Agrícola','tipo-agri'],pec:['Pecuária','tipo-pec'],ambos:['Agro+Pec','tipo-ambos']};
   box.innerHTML=list.map(c=>{
     const[tl,tc]=tipoLbl[c.tipo];
+    const nFazendas=(c.fazendas||[]).length;
     return `<div class="cli-card" onclick="abrirCli(${c.id})">
       <div class="cli-top">
-        <div><div class="cli-nome">${c.nome}</div><div class="cli-loc">📍 ${c.loc}</div></div>
+        <div><div class="cli-nome">${c.nome}</div><div class="cli-loc">📍 ${c.loc}${nFazendas>1?` · ${nFazendas} fazendas`:''}</div></div>
         <div class="cli-tipo ${tc}">${tl}</div>
       </div>
       <div class="cli-stats">
@@ -1485,19 +1578,26 @@ function abrirCli(id){
   const compras=(c.compras||[]).slice().reverse().map(comp=>`<div class="result-line"><span>${comp.prod} (${comp.data})</span><b>${comp.qtd} kg${comp.valor?' · R$ '+Number(comp.valor).toLocaleString('pt-BR'):''}</b></div>`).join('')||'<div class="result-note">Sem compras registradas</div>';
   const prods=(c.produtos||[]).map(p=>`<span class="prod-tag tag-agua">${p}</span>`).join('');
   const end=c.endereco||{};
+  const fazendas=c.fazendas&&c.fazendas.length?c.fazendas:criarFazendaPrimariaDeFlat(c);
+  const fazendasHtml=fazendas.map(f=>{
+    const fe=f.endereco||{};
+    const locTxt=[fe.cidade,fe.uf].filter(Boolean).join('/')||'—';
+    return `<div class="result-line"><span>🚜 ${f.nome||'Fazenda'}</span><b>📍 ${locTxt} · ${f.area||'—'} ha · ${f.cabecas||'—'} cab.</b></div>`;
+  }).join('');
   const cadastro = (c.cpfCnpj||c.telefone||c.email||end.rua) ? `
-    <div class="prod-cat" style="margin-top:16px">Dados cadastrais</div>
+    <div class="prod-cat" style="margin-top:16px">Dados cadastrais (proprietário)</div>
     <div class="result" style="display:block">
       ${c.cpfCnpj?`<div class="result-line"><span>CPF/CNPJ</span><b>${c.cpfCnpj}</b></div>`:''}
       ${c.telefone?`<div class="result-line"><span>Telefone</span><b>${c.telefone}</b></div>`:''}
       ${c.email?`<div class="result-line"><span>E-mail</span><b>${c.email}</b></div>`:''}
-      ${end.rua?`<div class="result-line"><span>Endereço</span><b>${end.rua}${end.cidade?', '+end.cidade:''}${end.uf?'/'+end.uf:''}${end.cep?' · '+end.cep:''}</b></div>`:''}
+      ${end.rua||end.cidade?`<div class="result-line"><span>Endereço</span><b>${formatEndereco(end)}</b></div>`:''}
     </div>` : '<div class="result-note" style="margin-top:14px">Cadastre CPF/CNPJ, telefone e endereço em "Editar" — necessário para gerar PDFs de orçamento/pedido.</div>';
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
-    <h2>${c.nome}</h2>
-    <div class="cli-loc" style="margin-bottom:14px">📍 ${c.loc} · ${c.area} ha · ${c.cabecas} cabeças</div>
-    <div class="prod-cat">Produtos que compra</div>
+    <h2>👤 ${c.nome}</h2>
+    <div class="prod-cat">Fazendas</div>
+    <div class="result" style="display:block;margin-bottom:6px">${fazendasHtml||'<div class="result-note">Nenhuma fazenda cadastrada</div>'}</div>
+    <div class="prod-cat" style="margin-top:16px">Produtos que compra</div>
     <div>${prods||'—'}</div>
     ${cadastro}
     <div class="prod-cat" style="margin-top:16px">Histórico de compras</div>
@@ -1512,52 +1612,131 @@ function abrirCli(id){
     </div>
   `);
 }
+let _cliDraft=null;
+let _cliDraftEditId=null;
+function novaFazendaVazia(){
+  return {id:Date.now()+Math.floor(Math.random()*1000), nome:'', tipo:'ambos', area:'', cabecas:'',
+    endereco:{rua:'',numero:'',bairro:'',complemento:'',cidade:'',uf:'',cep:''}};
+}
 function abrirNovoCli(editId){
+  _cliDraftEditId=editId||null;
   const c = editId ? DB.clientes.find(x=>x.id===editId) : null;
-  const end = c?.endereco || {};
+  if(c){
+    _cliDraft=JSON.parse(JSON.stringify({
+      nome:c.nome, cpfCnpj:c.cpfCnpj||'', telefone:c.telefone||'', email:c.email||'',
+      fazendas:(c.fazendas&&c.fazendas.length)?c.fazendas:criarFazendaPrimariaDeFlat(c)
+    }));
+  } else {
+    _cliDraft={nome:'', cpfCnpj:'', telefone:'', email:'', fazendas:[novaFazendaVazia()]};
+  }
+  renderFormCliente(editId);
+}
+function renderFormCliente(editId){
+  const tipoOpts=(sel)=>`
+      <option value="agri" ${sel==='agri'?'selected':''}>Agrícola</option>
+      <option value="pec" ${sel==='pec'?'selected':''}>Pecuária</option>
+      <option value="ambos" ${!sel||sel==='ambos'?'selected':''}>Agrícola + Pecuária</option>`;
+  const fazendasHtml=_cliDraft.fazendas.map((f,i)=>{
+    const e=f.endereco||{};
+    return `
+    <div class="prod-cat" style="margin-top:18px;display:flex;justify-content:space-between;align-items:center">
+      <span>🚜 Fazenda ${i+1}</span>
+      ${_cliDraft.fazendas.length>1?`<button onclick="removerFazendaCli(${i})" style="background:none;border:none;color:var(--verm);font-weight:700">🗑️ Remover</button>`:''}
+    </div>
+    <div class="field"><label>Nome da fazenda</label><input id="fz_nome_${i}" placeholder="ex: Fazenda Santa Rita" value="${f.nome||''}"></div>
+    <div class="row2">
+      <div class="field"><label>Tipo</label><select id="fz_tipo_${i}">${tipoOpts(f.tipo)}</select></div>
+      <div class="field"><label>Hectares</label><input type="number" id="fz_area_${i}" value="${f.area||''}"></div>
+    </div>
+    <div class="field"><label>Cabeças</label><input type="number" id="fz_cab_${i}" value="${f.cabecas||''}"></div>
+    <div class="field"><label>CEP</label><input id="fz_cep_${i}" placeholder="00000-000" value="${e.cep||''}" oninput="onCepFazendaInput(${i})">
+      <div class="hint" id="fz_cepStatus_${i}"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Estado (UF)</label><select id="fz_uf_${i}">
+        <option value="">Selecione...</option>${listaUfOptions(e.uf)}
+      </select></div>
+      <div class="field autoc-box"><label>Município</label>
+        <input id="fz_cidade_${i}" placeholder="digite para buscar" autocomplete="off" value="${e.cidade||''}" oninput="municipioAutocomplete('fz_cidade_${i}','fz_cidade_sug_${i}','fz_uf_${i}')" onblur="fecharAutocompleteCidade('fz_cidade_sug_${i}')">
+        <div class="autoc-list" id="fz_cidade_sug_${i}" style="display:none"></div>
+      </div>
+    </div>
+    <div class="field"><label>Rua</label><input id="fz_rua_${i}" placeholder="autocompletado pelo CEP" value="${e.rua||''}"></div>
+    <div class="row2">
+      <div class="field"><label>Número</label><input id="fz_numero_${i}" value="${e.numero||''}"></div>
+      <div class="field"><label>Bairro</label><input id="fz_bairro_${i}" placeholder="autocompletado pelo CEP" value="${e.bairro||''}"></div>
+    </div>
+    <div class="field"><label>Complemento</label><input id="fz_compl_${i}" placeholder="opcional" value="${e.complemento||''}"></div>`;
+  }).join('');
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
-    <h2>${c?'Editar cliente':'Novo cliente'}</h2>
-    <div class="field"><label>Nome / Fazenda</label><input id="nc_nome" placeholder="ex: Fazenda..." value="${c?c.nome:''}"></div>
-    <div class="field"><label>Cidade/UF</label><input id="nc_loc" placeholder="ex: Jataí/GO" value="${c?c.loc:''}"></div>
-    <div class="field"><label>Tipo</label><select id="nc_tipo">
-      <option value="agri" ${c?.tipo==='agri'?'selected':''}>Agrícola</option>
-      <option value="pec" ${c?.tipo==='pec'?'selected':''}>Pecuária</option>
-      <option value="ambos" ${!c||c.tipo==='ambos'?'selected':''}>Agrícola + Pecuária</option>
-    </select></div>
-    <div class="row2"><div class="field"><label>Hectares</label><input type="number" id="nc_area" value="${c?c.area:''}"></div><div class="field"><label>Cabeças</label><input type="number" id="nc_cab" value="${c?c.cabecas:''}"></div></div>
+    <h2>${editId?'Editar cliente':'Novo cliente'}</h2>
+    <div class="field"><label>Nome do proprietário</label><input id="nc_nome" placeholder="ex: João da Silva" value="${_cliDraft.nome||''}"></div>
 
     <div class="prod-cat" style="margin-top:4px">Dados cadastrais <span style="text-transform:none;font-weight:500">(para documentos/PDF)</span></div>
-    <div class="field"><label>CPF/CNPJ</label><input id="nc_doc" placeholder="000.000.000-00 ou 00.000.000/0000-00" value="${c?.cpfCnpj||''}"></div>
+    <div class="field"><label>CPF/CNPJ</label><input id="nc_doc" placeholder="000.000.000-00 ou 00.000.000/0000-00" value="${_cliDraft.cpfCnpj||''}"></div>
     <div class="row2">
-      <div class="field"><label>Telefone (WhatsApp)</label><input id="nc_fone" placeholder="(64) 99999-9999" value="${c?.telefone||''}"></div>
-      <div class="field"><label>E-mail</label><input type="email" id="nc_email" placeholder="opcional" value="${c?.email||''}"></div>
+      <div class="field"><label>Telefone (WhatsApp)</label><input id="nc_fone" placeholder="(64) 99999-9999" value="${_cliDraft.telefone||''}"></div>
+      <div class="field"><label>E-mail</label><input type="email" id="nc_email" placeholder="opcional" value="${_cliDraft.email||''}"></div>
     </div>
-    <div class="field"><label>Endereço (rua, número, complemento)</label><input id="nc_end_rua" placeholder="ex: Rod. BR-364, km 12, s/n, Zona Rural" value="${end.rua||''}"></div>
-    <div class="row2">
-      <div class="field"><label>Cidade</label><input id="nc_end_cidade" value="${end.cidade||''}"></div>
-      <div class="field"><label>UF</label><input id="nc_end_uf" maxlength="2" style="text-transform:uppercase" value="${end.uf||''}"></div>
-    </div>
-    <div class="field"><label>CEP</label><input id="nc_end_cep" placeholder="00000-000" value="${end.cep||''}"></div>
 
-    <button class="btn-calc" onclick="salvarCli(${editId||''})">${c?'Salvar alterações':'Salvar cliente'}</button>
+    ${fazendasHtml}
+    <button class="btn-calc" style="margin-top:14px;background:var(--cinza-cl);color:var(--verde)" onclick="adicionarFazendaCli()">➕ Adicionar fazenda</button>
+
+    <button class="btn-calc" style="margin-top:14px" onclick="salvarCli(${editId||''})">${editId?'Salvar alterações':'Salvar cliente'}</button>
   `);
 }
+function _syncCliDraftFromDom(){
+  if(!_cliDraft) return;
+  const g=id=>document.getElementById(id);
+  if(g('nc_nome')) _cliDraft.nome=g('nc_nome').value;
+  if(g('nc_doc')) _cliDraft.cpfCnpj=g('nc_doc').value;
+  if(g('nc_fone')) _cliDraft.telefone=g('nc_fone').value;
+  if(g('nc_email')) _cliDraft.email=g('nc_email').value;
+  _cliDraft.fazendas.forEach((f,i)=>{
+    if(!g('fz_nome_'+i)) return;
+    f.nome=g('fz_nome_'+i).value;
+    f.tipo=g('fz_tipo_'+i).value;
+    f.area=+g('fz_area_'+i).value||0;
+    f.cabecas=+g('fz_cab_'+i).value||0;
+    f.endereco={
+      cep:g('fz_cep_'+i).value.trim(),
+      uf:g('fz_uf_'+i).value.trim().toUpperCase(),
+      cidade:g('fz_cidade_'+i).value.trim(),
+      rua:g('fz_rua_'+i).value.trim(),
+      numero:g('fz_numero_'+i).value.trim(),
+      bairro:g('fz_bairro_'+i).value.trim(),
+      complemento:g('fz_compl_'+i).value.trim(),
+    };
+  });
+}
+function adicionarFazendaCli(){
+  _syncCliDraftFromDom();
+  _cliDraft.fazendas.push(novaFazendaVazia());
+  renderFormCliente(_cliDraftEditId);
+}
+function removerFazendaCli(i){
+  if(_cliDraft.fazendas.length<=1) return;
+  _syncCliDraftFromDom();
+  _cliDraft.fazendas.splice(i,1);
+  renderFormCliente(_cliDraftEditId);
+}
 function salvarCli(editId){
-  const nome=document.getElementById('nc_nome').value.trim();
-  if(!nome){alert('Informe o nome');return;}
-  const dados={nome,loc:document.getElementById('nc_loc').value,
-    tipo:document.getElementById('nc_tipo').value,area:+document.getElementById('nc_area').value||0,
-    cabecas:+document.getElementById('nc_cab').value||0,
-    cpfCnpj:document.getElementById('nc_doc').value.trim(),
-    telefone:document.getElementById('nc_fone').value.trim(),
-    email:document.getElementById('nc_email').value.trim(),
-    endereco:{
-      rua:document.getElementById('nc_end_rua').value.trim(),
-      cidade:document.getElementById('nc_end_cidade').value.trim(),
-      uf:document.getElementById('nc_end_uf').value.trim().toUpperCase(),
-      cep:document.getElementById('nc_end_cep').value.trim(),
-    }};
+  _syncCliDraftFromDom();
+  const nome=(_cliDraft.nome||'').trim();
+  if(!nome){alert('Informe o nome do proprietário');return;}
+  _cliDraft.fazendas.forEach(f=>{ if(!f.nome || !f.nome.trim()) f.nome=nome; });
+  const primaria=_cliDraft.fazendas[0];
+  const dados={
+    nome,
+    cpfCnpj:(_cliDraft.cpfCnpj||'').trim(),
+    telefone:(_cliDraft.telefone||'').trim(),
+    email:(_cliDraft.email||'').trim(),
+    fazendas:_cliDraft.fazendas,
+    tipo:primaria.tipo, area:primaria.area, cabecas:primaria.cabecas,
+    loc:[primaria.endereco.cidade,primaria.endereco.uf].filter(Boolean).join('/'),
+    endereco:primaria.endereco,
+  };
   if(editId){
     const c=DB.clientes.find(x=>x.id===editId);
     Object.assign(c,dados);
@@ -1565,6 +1744,7 @@ function salvarCli(editId){
     DB.clientes.push({id:Date.now(),...dados,compras:[],produtos:[]});
   }
   saveDB();fecharModal();renderClientes();renderKPIs();renderAlertas();
+  _cliDraft=null;
 }
 function excluirCli(id){
   if(!confirm('Excluir este cliente e todo o histórico de visitas dele?'))return;
@@ -1673,7 +1853,9 @@ function salvarPreviewClientes(){
   let importados = 0, ignorados = 0;
   _cliPreviewDraft.forEach(c=>{
     if(pular && nomesExistentes.has(c.nome.trim().toLowerCase())){ ignorados++; return; }
-    DB.clientes.push({id:Date.now()+importados, ...c, compras:[], produtos:[]});
+    const novo={id:Date.now()+importados, ...c, compras:[], produtos:[]};
+    novo.fazendas=criarFazendaPrimariaDeFlat(novo);
+    DB.clientes.push(novo);
     importados++;
   });
   saveDB();
@@ -1757,7 +1939,7 @@ function renderOrcamentos(){
     const[sl,sc]=statusLbl[o.status]||statusLbl.aberto;
     return `<div class="cli-card" onclick="abrirOrcamento(${o.id})">
       <div class="cli-top">
-        <div><div class="cli-nome">${o.clienteNome||'(sem cliente)'}</div><div class="cli-loc">📅 ${o.criadoEm||''}</div></div>
+        <div><div class="cli-nome">${o.clienteNome||'(sem cliente)'}</div><div class="cli-loc">${o.fazendaNome?`🚜 ${o.fazendaNome} · `:''}📅 ${o.criadoEm||''}</div></div>
         <div style="text-align:right">${validadeBadgeHtml(o)}<div class="lc-status ${sc}">${sl}</div></div>
       </div>
       <div class="cli-stats">
@@ -1776,6 +1958,10 @@ function abrirNovoOrcamento(editId, presetClienteId){
 function renderFormOrcamento(){
   const editId=_orcDraft.id;
   const opcoesCli=DB.clientes.map(c=>`<option value="${c.id}" ${_orcDraft.clienteId===c.id?'selected':''}>${c.nome}</option>`).join('');
+  const clienteSel=DB.clientes.find(c=>c.id===_orcDraft.clienteId);
+  const fazendasCli=clienteSel?.fazendas||[];
+  if(!_orcDraft.fazendaId && fazendasCli.length) _orcDraft.fazendaId=fazendasCli[0].id;
+  const opcoesFazenda=fazendasCli.map(f=>`<option value="${f.id}" ${_orcDraft.fazendaId===f.id?'selected':''}>${f.nome}</option>`).join('');
   const itensHtml=_orcDraft.itens.map((it,i)=>`
     <div class="result-line" style="cursor:pointer" title="Toque para editar este item" onclick="editarItemOrc(${i})"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.valorUnit)} <button onclick="event.stopPropagation();removerItemOrc(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('') || '<div class="result-note">Nenhum item adicionado ainda</div>';
   const total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
@@ -1783,9 +1969,10 @@ function renderFormOrcamento(){
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
     <h2>${editId?'Editar orçamento':'Novo orçamento'}</h2>
-    <div class="field"><label>Cliente</label><select id="orc_cliente">
+    <div class="field"><label>Cliente</label><select id="orc_cliente" onchange="onClienteOrcChange()">
       <option value="">Selecione...</option>${opcoesCli}
     </select></div>
+    ${fazendasCli.length>1?`<div class="field"><label>Fazenda (atendimento)</label><select id="orc_fazenda" onchange="_syncDraftCampos()">${opcoesFazenda}</select></div>`:''}
     <div class="prod-cat" style="margin-top:14px">Itens</div>
     <div class="result" style="display:block">${itensHtml}</div>
     <div class="row2" style="margin-top:10px">
@@ -1830,9 +2017,18 @@ function renderFormOrcamento(){
   `);
   atualizarCamposFreteOrc();
 }
+function onClienteOrcChange(){
+  _syncDraftCampos();
+  const cliSel=document.getElementById('orc_cliente');
+  _orcDraft.clienteId=cliSel.value?+cliSel.value:null;
+  _orcDraft.fazendaId=null;
+  renderFormOrcamento();
+}
 function _syncDraftCampos(){
   const cliSel=document.getElementById('orc_cliente');
   if(cliSel && cliSel.value) _orcDraft.clienteId=+cliSel.value;
+  const fazSel=document.getElementById('orc_fazenda');
+  if(fazSel && fazSel.value) _orcDraft.fazendaId=+fazSel.value;
   const val=document.getElementById('orc_validade');
   if(val) _orcDraft.validadeDias=+val.value||_orcDraft.validadeDias;
   const obs=document.getElementById('orc_obs');
@@ -1907,6 +2103,8 @@ function salvarOrcamento(){
   if(!_orcDraft.itens.length){alert('Adicione ao menos um item');return;}
   const cliente=DB.clientes.find(x=>x.id===_orcDraft.clienteId);
   _orcDraft.clienteNome=cliente?cliente.nome:'(cliente removido)';
+  const fazenda=(cliente?.fazendas||[]).find(f=>f.id===_orcDraft.fazendaId);
+  _orcDraft.fazendaNome=fazenda?fazenda.nome:null;
   _orcDraft.total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
   if(_orcDraft.id){
     const idx=DB.orcamentos.findIndex(x=>x.id===_orcDraft.id);
@@ -1928,6 +2126,7 @@ function abrirOrcamento(id){
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
     <h2>${o.clienteNome}</h2>
+    ${o.fazendaNome?`<div class="cli-loc" style="margin-bottom:2px">🚜 ${o.fazendaNome}</div>`:''}
     <div class="cli-loc" style="margin-bottom:10px">Criado em ${o.criadoEm} · válido por ${o.validadeDias||7} dias</div>
     ${(()=>{ const dias=diasRestantesValidade(o); if((o.status!=='aberto'&&o.status!=='negociacao')||dias===null||dias>2) return ''; const estiloBase='font-style:normal;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-weight:700'; return dias<0 ? `<div class="result-note" style="${estiloBase};background:#ffebee;color:var(--verm)">⏰ Esse orçamento venceu há ${-dias} dia${-dias!==1?'s':''} — confirme se o preço ainda é válido antes de enviar pro cliente.</div>` : `<div class="result-note" style="${estiloBase};background:#fff3e0;color:var(--laranja)">⏰ Vence em ${dias} dia${dias!==1?'s':''} — combine o fechamento ou renove o orçamento.</div>`; })()}
     <select id="orc_status_sel" onchange="mudarStatusOrc(${o.id},this.value)" style="width:100%;padding:10px;border:2px solid var(--borda);border-radius:10px;margin-bottom:14px;font-weight:700">
@@ -2105,6 +2304,10 @@ function aplicarStatusOrc(id,status,motivo,pagamento,comissaoConfig,frete){
   if(status==='fechado' && !o.comprasGeradas){
     criarComprasDoOrcamento(o);
     o.comprasGeradas=true;
+  } else if(status!=='fechado' && o.comprasGeradas){
+    const c=DB.clientes.find(x=>x.id===o.clienteId);
+    if(c) c.compras=(c.compras||[]).filter(cp=>cp.orcId!==o.id);
+    o.comprasGeradas=false;
   }
   if(status==='fechado' && pagamento && comissaoConfig){
     o.pagamento=pagamento;
@@ -2121,7 +2324,7 @@ function criarComprasDoOrcamento(o){
   const c=DB.clientes.find(x=>x.id===o.clienteId); if(!c) return;
   c.compras=c.compras||[]; c.produtos=c.produtos||[];
   (o.itens||[]).forEach(it=>{
-    c.compras.push({prod:it.produto, qtd:it.qtd, data:new Date().toISOString().slice(0,10), consumoDia:0, valor:it.qtd*it.valorUnit});
+    c.compras.push({prod:it.produto, qtd:it.qtd, data:new Date().toISOString().slice(0,10), consumoDia:0, valor:it.qtd*it.valorUnit, orcId:o.id});
     if(!c.produtos.includes(it.produto)) c.produtos.push(it.produto);
   });
   o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Venda registrada na ficha do cliente — entra em "Vendas no mês"'});
@@ -2456,8 +2659,13 @@ function registrarAcompanhamento(id){
 }
 function excluirOrcamento(id){
   if(!confirm('Excluir este orçamento? Essa ação não pode ser desfeita.'))return;
+  const o=DB.orcamentos.find(x=>x.id===id);
+  if(o && o.comprasGeradas){
+    const c=DB.clientes.find(x=>x.id===o.clienteId);
+    if(c) c.compras=(c.compras||[]).filter(cp=>cp.orcId!==id);
+  }
   DB.orcamentos=DB.orcamentos.filter(x=>x.id!==id);
-  saveDB();fecharModal();renderOrcamentos();renderComissoes();renderKPIs();
+  saveDB();fecharModal();renderOrcamentos();renderComissoes();renderKPIs();renderAlertas();
 }
 function renderComissoes(){
   const box=document.getElementById('comissoesBox');
@@ -2686,8 +2894,9 @@ function construirDocPDF(orcId, tipo, logoImg){
   doc.text('Cliente', 14, y); y+=6;
   doc.setFontSize(10); doc.setTextColor(40);
   doc.text(`${c?.nome||o.clienteNome||'-'}`, 14, y); y+=5;
+  if(o.fazendaNome){ doc.text(`Fazenda: ${o.fazendaNome}`, 14, y); y+=5; }
   if(c?.cpfCnpj){ doc.text(`CPF/CNPJ: ${c.cpfCnpj}`, 14, y); y+=5; }
-  if(c?.endereco?.rua){ doc.text(`Endereço: ${c.endereco.rua}${c.endereco.cidade?', '+c.endereco.cidade:''}${c.endereco.uf?'/'+c.endereco.uf:''}${c.endereco.cep?' - CEP '+c.endereco.cep:''}`, 14, y); y+=5; }
+  if(c?.endereco?.rua || c?.endereco?.cidade){ doc.text(`Endereço: ${formatEndereco(c.endereco)}`, 14, y); y+=5; }
   if(c?.telefone){ doc.text(`Telefone: ${c.telefone}`, 14, y); y+=5; }
   if(c?.email){ doc.text(`E-mail: ${c.email}`, 14, y); y+=5; }
   y+=5;
