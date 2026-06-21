@@ -13,6 +13,8 @@
 <link rel="icon" type="image/png" href="favicon.png">
 <title>Painel do Representante · JMG Agropastoril</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" defer></script>
 <style>
 :root{
   --verde:#367C2B; --verde-esc:#1E4A18; --verde-cl:#EAF4E7;
@@ -291,10 +293,10 @@ input,select,textarea{font-family:inherit;font-size:15px}
   <div class="greet-sub" id="dataHoje"></div>
 
   <div class="kpi-row">
-    <div class="kpi"><div class="kpi-num" id="kpiClientes">0</div><div class="kpi-lbl">Clientes na carteira</div></div>
+    <div class="kpi" onclick="nav('clientes')" style="cursor:pointer"><div class="kpi-num" id="kpiClientes">0</div><div class="kpi-lbl">Clientes na carteira</div></div>
     <div class="kpi o" onclick="nav('orcamentos')" style="cursor:pointer"><div class="kpi-num" id="kpiOrc">0</div><div class="kpi-lbl">Orçamentos abertos</div></div>
-    <div class="kpi v"><div class="kpi-num" id="kpiVendas">R$ 0</div><div class="kpi-lbl">Vendas no mês</div></div>
-    <div class="kpi r"><div class="kpi-num" id="kpiAlertas">0</div><div class="kpi-lbl">Alertas de recompra</div></div>
+    <div class="kpi v" onclick="nav('clientes')" style="cursor:pointer"><div class="kpi-num" id="kpiVendas">R$ 0</div><div class="kpi-lbl">Vendas no mês</div></div>
+    <div class="kpi r" onclick="scrollToAlertas()" style="cursor:pointer"><div class="kpi-num" id="kpiAlertas">0</div><div class="kpi-lbl">Alertas de recompra</div></div>
   </div>
 
   <div class="section-h">🔔 Alertas de recompra</div>
@@ -318,6 +320,8 @@ input,select,textarea{font-family:inherit;font-size:15px}
     <div class="subtab" data-c="solo" onclick="switchCalc('solo')">🧪 Solo</div>
     <div class="subtab" data-c="pasto" onclick="switchCalc('pasto')">🐂 Pastagem</div>
     <div class="subtab" data-c="nutricao" onclick="switchCalc('nutricao')">🧂 Nutrição</div>
+    <div class="subtab" data-c="precos" onclick="switchCalc('precos')">🏷️ Preços</div>
+    <div class="subtab" data-c="rapido" onclick="switchCalc('rapido')">⚡ Rápido</div>
   </div>
 
   <!-- SEMENTES -->
@@ -446,6 +450,52 @@ input,select,textarea{font-family:inherit;font-size:15px}
         <div class="result-detail" id="rn_detail"></div>
         <div class="result-note">Consumo/dia = cabeças × (% PV × peso). Duração = qtd comprada ÷ consumo diário. Já gera o alerta de recompra.</div>
       </div>
+    </div>
+  </div>
+
+  <!-- LISTA DE PREÇOS -->
+  <div class="calc-pane" id="c-precos" style="display:none">
+    <div class="calc-box">
+      <h3>📄 Atualizar por arquivo <span class="badge-tec">PDF / Word</span></h3>
+      <p style="font-size:13px;color:var(--cinza);margin-bottom:12px;line-height:1.5">
+        Envie a tabela de preços em PDF ou Word (.docx) — o painel lê o arquivo e tenta reconhecer produto e preço em cada linha automaticamente. Sempre revise o resultado antes de salvar.
+      </p>
+      <input type="file" id="precoFile" accept=".pdf,.docx" style="display:none" onchange="lerArquivoPrecos(event)">
+      <button class="btn-calc" onclick="document.getElementById('precoFile').click()">📂 Selecionar arquivo (.pdf ou .docx)</button>
+      <div id="precoLeituraStatus" style="margin-top:10px;font-size:13px;color:var(--cinza)"></div>
+      <div id="precoPreviewBox"></div>
+    </div>
+
+    <div class="calc-box" style="margin-top:14px">
+      <h3>🏷️ Lista de preços <span class="badge-tec" id="precoCount">0 itens</span></h3>
+      <input class="search-bar" id="precoBusca" placeholder="🔍 Buscar produto..." oninput="renderListaPrecos()" style="margin-bottom:10px">
+      <div id="precoListaBox"></div>
+      <button class="btn-calc" style="margin-top:10px;background:var(--cinza-cl);color:var(--verde)" onclick="adicionarItemPrecoManual()">➕ Adicionar item manualmente</button>
+    </div>
+  </div>
+
+  <!-- ORÇAMENTO RÁPIDO -->
+  <div class="calc-pane" id="c-rapido" style="display:none">
+    <div class="calc-box">
+      <h3>⚡ Orçamento rápido <span class="badge-tec">na hora, pro cliente ver</span></h3>
+      <div id="rapidoItensBox"><div class="result-note">Nenhum item adicionado ainda</div></div>
+      <div class="row2" style="margin-top:10px">
+        <div class="field"><label>Produto</label>
+          <input id="rp_prod" list="rapidoProdutos" placeholder="digite ou escolha da lista" oninput="autoPrecoRapido()">
+          <datalist id="rapidoProdutos"></datalist>
+        </div>
+        <div class="field"><label>Qtd.</label><input type="number" id="rp_qtd" placeholder="0"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Unidade</label><input id="rp_un" value="un"></div>
+        <div class="field"><label>Preço unit. (R$)</label><input type="number" id="rp_preco" placeholder="0"></div>
+      </div>
+      <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde)" onclick="addItemRapido()">➕ Adicionar item</button>
+      <div class="row2" style="margin-top:14px">
+        <div class="field"><label>Juros a prazo (% sobre o total)</label><input type="number" id="rp_juros" placeholder="ex: 5"></div>
+        <div class="field"><label>Prazo</label><input id="rp_prazo" placeholder="ex: 30/60/90 dias ou 3x"></div>
+      </div>
+      <button class="btn-calc" onclick="visualizarOrcamentoRapido()">👁️ Visualizar orçamento rápido</button>
     </div>
   </div>
 </div>
@@ -754,12 +804,14 @@ let DB = loadDB() || {
   visitas:{},
   learnStatus:{},
   quizScores:{},
+  listaPrecos:[],
 };
 function migrarDB(){
   DB.clientes.forEach(c=>{
     c.compras=c.compras||[]; c.produtos=c.produtos||[];
     c.endereco=c.endereco||{rua:'',cidade:'',uf:'',cep:''};
   });
+  DB.listaPrecos=DB.listaPrecos||[];
   DB.orcamentos=(DB.orcamentos||[]).map(o=>{
     if(!o.itens){
       const cli=DB.clientes.find(x=>x.nome===o.cliente);
@@ -790,6 +842,10 @@ function nav(v){
   window.scrollTo(0,0);
 }
 function goCalc(c){nav('calc');switchCalc(c);}
+function scrollToAlertas(){
+  const el=document.getElementById('alertList');
+  if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
+}
 
 /* ---- INIT ---- */
 function initApp(){
@@ -876,6 +932,8 @@ function switchCalc(c){
   document.querySelectorAll('.calc-pane').forEach(p=>p.style.display='none');
   document.getElementById('c-'+c).style.display='block';
   document.querySelectorAll('#calcTabs .subtab').forEach(t=>t.classList.toggle('active',t.dataset.c===c));
+  if(c==='precos') renderListaPrecos();
+  if(c==='rapido'){ popularDatalistRapido(); renderRapidoItens(); }
 }
 
 /* SEMENTES */
@@ -988,6 +1046,213 @@ function calcNut(){
   document.getElementById('rn_dias').textContent=dias;
   document.getElementById('rn_detail').innerHTML=html;
   document.getElementById('r_nut').classList.add('show');
+}
+
+/* ============================================================
+   LISTA DE PREÇOS (leitura automática de PDF/Word) + ORÇAMENTO RÁPIDO
+============================================================ */
+let _precoPreviewDraft = null;
+
+function lerArquivoPrecos(ev){
+  const file = ev.target.files[0]; if(!file) return;
+  const status = document.getElementById('precoLeituraStatus');
+  status.textContent = '⏳ Lendo arquivo...';
+  const ext = file.name.toLowerCase().split('.').pop();
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try{
+      let texto = '';
+      if(ext === 'pdf') texto = await extrairTextoPDF(reader.result);
+      else if(ext === 'docx') texto = await extrairTextoDocx(reader.result);
+      else throw new Error('Envie um arquivo .pdf ou .docx');
+      const itens = parsearLinhasPreco(texto);
+      if(!itens.length){
+        status.innerHTML = '⚠️ Não consegui identificar produtos com preço neste arquivo. Tente adicionar manualmente.';
+        return;
+      }
+      status.innerHTML = `✅ ${itens.length} item(ns) reconhecido(s). Revise abaixo antes de salvar.`;
+      _precoPreviewDraft = itens;
+      renderPreviewPrecos();
+    }catch(e){
+      console.warn('lerArquivoPrecos', e);
+      status.innerHTML = '❌ Não foi possível ler o arquivo: ' + e.message;
+    }
+    ev.target.value = '';
+  };
+  reader.onerror = () => { status.textContent = '❌ Erro ao ler o arquivo.'; };
+  reader.readAsArrayBuffer(file);
+}
+async function extrairTextoPDF(arrayBuffer){
+  if(typeof pdfjsLib === 'undefined') throw new Error('Leitor de PDF não carregou — verifique sua conexão e tente de novo.');
+  if(!pdfjsLib.GlobalWorkerOptions.workerSrc){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  const pdf = await pdfjsLib.getDocument({data: arrayBuffer}).promise;
+  let texto = '';
+  for(let i=1; i<=pdf.numPages; i++){
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    let linhaY = null, linhas = [];
+    content.items.forEach(item=>{
+      const y = item.transform[5];
+      if(linhaY===null || Math.abs(y-linhaY)>2){ linhas.push([item.str]); linhaY = y; }
+      else linhas[linhas.length-1].push(item.str);
+    });
+    texto += linhas.map(l=>l.join(' ')).join('\n') + '\n';
+  }
+  return texto;
+}
+async function extrairTextoDocx(arrayBuffer){
+  if(typeof mammoth === 'undefined') throw new Error('Leitor de Word não carregou — verifique sua conexão e tente de novo.');
+  const resultado = await mammoth.extractRawText({arrayBuffer});
+  return resultado.value;
+}
+function parsearLinhasPreco(texto){
+  const linhas = texto.split('\n').map(l=>l.trim()).filter(Boolean);
+  const re = /R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})(?:\s*\/\s*\w+)?\s*$/;
+  const itens = [];
+  linhas.forEach(linha=>{
+    const m = linha.match(re);
+    if(!m) return;
+    const precoNum = parseFloat(m[1].replace(/\./g,'').replace(',','.'));
+    if(!precoNum || precoNum<=0) return;
+    const produto = linha.slice(0, m.index).replace(/[-:.\s]+$/,'').trim();
+    if(!produto) return;
+    itens.push({id:Date.now()+itens.length, produto, preco:precoNum, unidade:'un', atualizadoEm:new Date().toISOString().slice(0,10)});
+  });
+  return itens;
+}
+function renderPreviewPrecos(){
+  const box = document.getElementById('precoPreviewBox');
+  if(!_precoPreviewDraft || !_precoPreviewDraft.length){ box.innerHTML=''; return; }
+  box.innerHTML = `
+    <div style="margin-top:12px">
+      ${_precoPreviewDraft.map((it,i)=>`
+        <div class="row2" style="margin-bottom:6px">
+          <input value="${it.produto}" oninput="_precoPreviewDraft[${i}].produto=this.value" style="flex:2">
+          <input type="number" value="${it.preco}" oninput="_precoPreviewDraft[${i}].preco=+this.value||0" style="flex:1">
+          <button onclick="removerPreviewItem(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;padding:0 6px">✕</button>
+        </div>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn-calc" style="flex:1" onclick="salvarPreviewPrecos()">✅ Salvar ${_precoPreviewDraft.length} item(ns) na lista</button>
+      <button onclick="cancelarPreviewPrecos()" style="flex:1;padding:14px;background:var(--cinza-cl);color:var(--verm);border-radius:12px;font-weight:700">✕ Cancelar</button>
+    </div>`;
+}
+function removerPreviewItem(i){ _precoPreviewDraft.splice(i,1); renderPreviewPrecos(); }
+function salvarPreviewPrecos(){
+  if(!_precoPreviewDraft || !_precoPreviewDraft.length) return;
+  DB.listaPrecos = (DB.listaPrecos||[]).concat(_precoPreviewDraft);
+  saveDB();
+  _precoPreviewDraft = null;
+  document.getElementById('precoPreviewBox').innerHTML='';
+  document.getElementById('precoLeituraStatus').innerHTML='✅ Lista atualizada!';
+  renderListaPrecos();
+}
+function cancelarPreviewPrecos(){
+  _precoPreviewDraft = null;
+  document.getElementById('precoPreviewBox').innerHTML='';
+  document.getElementById('precoLeituraStatus').innerHTML='';
+}
+function renderListaPrecos(){
+  const box = document.getElementById('precoListaBox');
+  if(!box) return;
+  const q = (document.getElementById('precoBusca')?.value||'').toLowerCase();
+  const lista = (DB.listaPrecos||[]).filter(it=>it.produto.toLowerCase().includes(q));
+  document.getElementById('precoCount').textContent = (DB.listaPrecos||[]).length + ' itens';
+  if(!lista.length){ box.innerHTML = '<div class="result-note">Nenhum produto na lista ainda.</div>'; return; }
+  box.innerHTML = lista.map(it=>`
+    <div class="result-line">
+      <span>${it.produto}</span>
+      <b>
+        <input type="number" value="${it.preco}" style="width:70px;text-align:right;border:none;background:none;font-weight:700;color:var(--verde)" onchange="editarPrecoItem(${it.id},'preco',this.value)">
+        <button onclick="excluirItemPreco(${it.id})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button>
+      </b>
+    </div>`).join('');
+}
+function editarPrecoItem(id, campo, val){
+  const it = (DB.listaPrecos||[]).find(x=>x.id===id);
+  if(!it) return;
+  it[campo] = campo==='preco' ? (+val||0) : val;
+  it.atualizadoEm = new Date().toISOString().slice(0,10);
+  saveDB();
+}
+function excluirItemPreco(id){
+  if(!confirm('Remover este produto da lista de preços?')) return;
+  DB.listaPrecos = (DB.listaPrecos||[]).filter(x=>x.id!==id);
+  saveDB();
+  renderListaPrecos();
+}
+function adicionarItemPrecoManual(){
+  const produto = prompt('Nome do produto:'); if(!produto) return;
+  const preco = +prompt('Preço (R$):','0') || 0;
+  DB.listaPrecos = DB.listaPrecos||[];
+  DB.listaPrecos.push({id:Date.now(), produto, preco, unidade:'un', atualizadoEm:new Date().toISOString().slice(0,10)});
+  saveDB();
+  renderListaPrecos();
+}
+
+/* ---- ORÇAMENTO RÁPIDO ---- */
+let _rapidoItens = [];
+function autoPrecoRapido(){
+  const nome = document.getElementById('rp_prod').value.trim().toLowerCase();
+  if(!nome) return;
+  const match = (DB.listaPrecos||[]).find(it=>it.produto.toLowerCase()===nome);
+  if(match) document.getElementById('rp_preco').value = match.preco;
+}
+function addItemRapido(){
+  const produto = document.getElementById('rp_prod').value.trim();
+  const qtd = +document.getElementById('rp_qtd').value||0;
+  const unidade = document.getElementById('rp_un').value.trim()||'un';
+  const preco = +document.getElementById('rp_preco').value||0;
+  if(!produto||!qtd||!preco){ alert('Informe produto, quantidade e preço.'); return; }
+  _rapidoItens.push({produto, qtd, unidade, preco});
+  document.getElementById('rp_prod').value=''; document.getElementById('rp_qtd').value='';
+  document.getElementById('rp_preco').value=''; document.getElementById('rp_un').value='un';
+  renderRapidoItens();
+}
+function removerItemRapido(i){ _rapidoItens.splice(i,1); renderRapidoItens(); }
+function renderRapidoItens(){
+  const box = document.getElementById('rapidoItensBox');
+  if(!box) return;
+  if(!_rapidoItens.length){ box.innerHTML='<div class="result-note">Nenhum item adicionado ainda</div>'; return; }
+  const total = _rapidoItens.reduce((s,it)=>s+it.qtd*it.preco,0);
+  box.innerHTML = _rapidoItens.map((it,i)=>`
+    <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.preco)} <button onclick="removerItemRapido(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('')
+    + `<div class="result-line" style="margin-top:6px;font-size:16px"><span>Subtotal</span><b>${formatBRL(total)}</b></div>`;
+}
+function popularDatalistRapido(){
+  const dl = document.getElementById('rapidoProdutos');
+  if(!dl) return;
+  dl.innerHTML = (DB.listaPrecos||[]).map(it=>`<option value="${it.produto}">`).join('');
+}
+function visualizarOrcamentoRapido(){
+  if(!_rapidoItens.length){ alert('Adicione ao menos um item.'); return; }
+  const subtotal = _rapidoItens.reduce((s,it)=>s+it.qtd*it.preco,0);
+  const juros = +document.getElementById('rp_juros').value||0;
+  const prazo = document.getElementById('rp_prazo').value.trim();
+  const totalPrazo = subtotal*(1+juros/100);
+  const itensHtml = _rapidoItens.map(it=>`
+    <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade} × ${formatBRL(it.preco)}</span><b>${formatBRL(it.qtd*it.preco)}</b></div>`).join('');
+  modal(`
+    <button class="modal-x" onclick="fecharModal()">✕</button>
+    <h2>⚡ Orçamento rápido</h2>
+    <div class="result" style="display:block">${itensHtml}</div>
+    <div class="result-line" style="margin-top:10px;font-size:18px"><span>Total à vista</span><b>${formatBRL(subtotal)}</b></div>
+    ${juros>0?`<div class="result-line" style="font-size:16px;color:var(--cinza)"><span>Total a prazo${prazo?(' ('+prazo+')'):''} +${juros}%</span><b>${formatBRL(totalPrazo)}</b></div>`:''}
+    <div class="disclaimer" style="margin-top:14px">Valores e prazos sujeitos à confirmação. Sem registro de cliente — use a aba Orçamentos para gerar documento formal e acompanhar.</div>
+    <button class="btn-calc" style="margin-top:14px" onclick="enviarRapidoParaFormal()">📋 Transformar em orçamento formal</button>
+    <button onclick="_rapidoItens=[];renderRapidoItens();fecharModal();" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verm);border-radius:12px;font-size:15px;font-weight:700">🗑️ Limpar e começar novo</button>
+  `);
+}
+function enviarRapidoParaFormal(){
+  if(!_rapidoItens.length) return;
+  const itensCopy = JSON.parse(JSON.stringify(_rapidoItens)).map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:it.preco}));
+  fecharModal();
+  nav('orcamentos');
+  abrirNovoOrcamento(null, null);
+  _orcDraft.itens = itensCopy;
+  renderFormOrcamento();
 }
 
 /* ============================================================
