@@ -1140,9 +1140,12 @@ function buscarProdutosBase(q,limite){
   const out=[];
   for(const p of PRODUTOS_BASE){
     const nn = normalizarHeader(p.n);
-    if(termos.every(t=>nn.includes(t))) out.push(p);
+    const cod = String(p.c);
+    if(termos.every(t=>nn.includes(t) || cod.includes(t))) out.push(p);
   }
   out.sort((a,b)=>{
+    const aCodExato=String(a.c)===nq?0:1, bCodExato=String(b.c)===nq?0:1;
+    if(aCodExato!==bCodExato) return aCodExato-bCodExato;
     const an=normalizarHeader(a.n), bn=normalizarHeader(b.n);
     const aStarts=an.startsWith(nq)?0:1, bStarts=bn.startsWith(nq)?0:1;
     if(aStarts!==bStarts) return aStarts-bStarts;
@@ -1160,7 +1163,7 @@ function buscarProdutoAutocomplete(inputId,boxId){
   box.innerHTML=resultados.map((p,i)=>`
     <div class="autoc-item" onclick="selecionarProdutoAutocomplete('${inputId}','${boxId}',${i})">
       <div class="autoc-nome">${p.n}</div>
-      <div class="autoc-meta">${[p.l,p.s,p.f].filter(Boolean).join(' \u00b7 ')}</div>
+      <div class="autoc-meta">${['C\u00f3d. '+p.c,p.l,p.s,p.f].filter(Boolean).join(' \u00b7 ')}</div>
     </div>`).join('');
   box.style.display='block';
 }
