@@ -1574,8 +1574,21 @@ function aplicarStatusOrc(id,status,motivo){
     else { o.motivoPerda=motivo; o.motivoGanho=null; }
   }
   o.historico.push({data:new Date().toISOString().slice(0,10),texto});
-  saveDB();renderOrcamentos();renderKPIs();
+  if(status==='fechado' && !o.comprasGeradas){
+    criarComprasDoOrcamento(o);
+    o.comprasGeradas=true;
+  }
+  saveDB();renderOrcamentos();renderKPIs();renderAlertas();
   if(document.getElementById('modal').classList.contains('show')) abrirOrcamento(id);
+}
+function criarComprasDoOrcamento(o){
+  const c=DB.clientes.find(x=>x.id===o.clienteId); if(!c) return;
+  c.compras=c.compras||[]; c.produtos=c.produtos||[];
+  (o.itens||[]).forEach(it=>{
+    c.compras.push({prod:it.produto, qtd:it.qtd, data:new Date().toISOString().slice(0,10), consumoDia:0, valor:it.qtd*it.valorUnit});
+    if(!c.produtos.includes(it.produto)) c.produtos.push(it.produto);
+  });
+  o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Venda registrada na ficha do cliente — entra em "Vendas no mês"'});
 }
 function abrirMotivoStatus(id,status){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
