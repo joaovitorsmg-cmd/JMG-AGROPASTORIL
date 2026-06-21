@@ -1506,7 +1506,7 @@ function atualizarPreviaFreteRapido(){
   const total=_rapidoItens.reduce((s,it)=>s+it.qtd*it.preco,0);
   const itensConv=_rapidoItens.map(it=>({produto:it.produto,qtd:it.qtd,unidade:it.unidade,valorUnit:it.preco}));
   const custo=frete&&frete.tipo?calcularValorFrete({itens:itensConv,total,frete}):0;
-  box.innerHTML=custo>0?`💰 Custo de frete estimado: <b>${formatBRL(custo)}</b> — confira se isso já está coberto no preço dos itens antes de enviar pro cliente.`:'';
+  box.innerHTML=custo>0?`💰 Custo de frete estimado: <b>${formatBRL(custo)}</b> — será embutido automaticamente no valor dos itens quando você transformar isso em orçamento formal.`:'';
 }
 function visualizarOrcamentoRapido(){
   if(!_rapidoItens.length){ alert('Adicione ao menos um item.'); return; }
@@ -1527,7 +1527,7 @@ function visualizarOrcamentoRapido(){
     <div class="result" style="display:block">${itensHtml}</div>
     <div class="result-line" style="margin-top:10px;font-size:18px"><span>Total à vista</span><b>${formatBRL(subtotal)}</b></div>
     ${juros>0&&prazoDias>0?`<div class="result-line" style="font-size:16px;color:var(--cinza)"><span>Total a prazo (${prazoDias} dias, ${juros}% ao ${jurosPeriodo==='mes'?'mês':'dia'} = +${jurosTotalPct.toFixed(2)}%)</span><b>${formatBRL(totalPrazo)}</b></div>`:''}
-    ${custoFrete>0?`<div class="result-line" style="color:var(--cinza)"><span>Custo de frete (seu controle — não cobrado do cliente)</span><b>${formatBRL(custoFrete)}</b></div>`:''}
+    ${custoFrete>0?`<div class="result-line" style="color:var(--cinza)"><span>Frete a ser embutido no preço (ao formalizar)</span><b>${formatBRL(custoFrete)}</b></div>`:''}
     ${frete&&frete.responsavel?`<div class="result-note" style="margin-top:4px">Responsável pela entrega: <b>${FRETE_RESPONSAVEL_LABELS[frete.responsavel]}</b> — esse é o único dado de frete que pode ir pro cliente.</div>`:''}
     <div class="disclaimer" style="margin-top:14px">Valores e prazos sujeitos à confirmação. Sem registro de cliente — use a aba Orçamentos para gerar documento formal e acompanhar.</div>
     <button class="btn-calc" style="margin-top:14px" onclick="enviarRapidoParaFormal()">📋 Transformar em orçamento formal</button>
@@ -1953,6 +1953,11 @@ function renderOrcamentos(){
 function abrirNovoOrcamento(editId, presetClienteId){
   const o = editId ? DB.orcamentos.find(x=>x.id===editId) : null;
   _orcDraft = o ? JSON.parse(JSON.stringify(o)) : {id:null, clienteId:presetClienteId||null, itens:[], validadeDias:7, obs:'', frete:null, status:'aberto', historico:[]};
+  if(o){
+    // o.itens pode já estar com o frete embutido (valorUnit) de um salvamento anterior;
+    // ao reabrir pra editar, volta pro valor base (sem frete) pra não embutir de novo em dobro.
+    _orcDraft.itens = _orcDraft.itens.map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:(it.valorUnitBase!=null?it.valorUnitBase:it.valorUnit)}));
+  }
   renderFormOrcamento();
 }
 function renderFormOrcamento(){
@@ -2009,7 +2014,7 @@ function renderFormOrcamento(){
       </select>
     </div>
     <div id="orc_previaFrete" class="result-note" style="margin-top:6px"></div>
-    <div class="result-note" style="margin-top:2px">⚠️ Esse custo é só pra você se organizar e cobrar certo — nunca aparece no PDF nem na mensagem do cliente, só o rótulo do responsável pela entrega.</div>
+    <div class="result-note" style="margin-top:2px">💰 O valor do frete é embutido automaticamente no preço dos itens ao salvar — o cliente vê só o preço final já corrigido, nunca o frete separado. No PDF só aparece o rótulo do responsável pela entrega.</div>
 
     <div class="field" style="margin-top:14px"><label>Validade (dias)</label><input type="number" id="orc_validade" value="${_orcDraft.validadeDias||7}"></div>
     <div class="field"><label>Observações</label><textarea id="orc_obs" placeholder="condições de pagamento, etc.">${_orcDraft.obs||''}</textarea></div>
@@ -2059,9 +2064,11 @@ function atualizarPreviaFreteOrc(){
   _syncDraftCampos();
   const box=document.getElementById('orc_previaFrete');
   if(!box) return;
-  const total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
-  const custo=_orcDraft.frete&&_orcDraft.frete.tipo?calcularValorFrete({itens:_orcDraft.itens,total,frete:_orcDraft.frete}):0;
-  box.innerHTML=custo>0?`💰 Custo de frete estimado: <b>${formatBRL(custo)}</b> — confira se isso já está coberto no preço dos itens antes de enviar pro cliente.`:'';
+  const totalBase=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
+  const itensComFrete=aplicarFreteAosItens(_orcDraft.itens,_orcDraft.frete);
+  const totalFinal=itensComFrete.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
+  const custo=totalFinal-totalBase;
+  box.innerHTML=custo>0?`💰 Frete de <b>${formatBRL(custo)}</b> será embutido automaticamente no valor dos itens — total final pro cliente: <b>${formatBRL(totalFinal)}</b>.`:'';
 }
 function adicionarItemOrc(){
   const produto=document.getElementById('oi_prod').value.trim();
@@ -2105,7 +2112,10 @@ function salvarOrcamento(){
   _orcDraft.clienteNome=cliente?cliente.nome:'(cliente removido)';
   const fazenda=(cliente?.fazendas||[]).find(f=>f.id===_orcDraft.fazendaId);
   _orcDraft.fazendaNome=fazenda?fazenda.nome:null;
+  const subtotalBase=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
+  _orcDraft.itens=aplicarFreteAosItens(_orcDraft.itens,_orcDraft.frete);
   _orcDraft.total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
+  _orcDraft.valorFreteEmbutido=+(_orcDraft.total-subtotalBase).toFixed(2);
   if(_orcDraft.id){
     const idx=DB.orcamentos.findIndex(x=>x.id===_orcDraft.id);
     DB.orcamentos[idx]=_orcDraft;
@@ -2138,7 +2148,12 @@ function abrirOrcamento(id){
     <div class="prod-cat">Itens</div>
     <div class="result" style="display:block">${itensHtml}</div>
     <div class="result-line" style="margin-top:10px;font-size:16px"><span>Total</span><b>${formatBRL(o.total||0)}</b></div>
-    ${o.frete&&(o.frete.tipo||o.frete.responsavel)?`<div class="result-note" style="margin-top:8px">🚚 Frete (só pra você, não vai pro cliente): ${calcularValorFrete(o)>0?`<b>${formatBRL(calcularValorFrete(o))}</b> · `:''}responsável: <b>${o.frete.responsavel?FRETE_RESPONSAVEL_LABELS[o.frete.responsavel]:'não definido'}</b></div>`:''}
+    ${o.frete&&(o.frete.tipo||o.frete.responsavel)?(()=>{
+      const embutido=o.valorFreteEmbutido>0?o.valorFreteEmbutido:0;
+      const legado=!embutido?calcularValorFrete(o):0;
+      const linha=embutido>0?`Frete de <b>${formatBRL(embutido)}</b> já embutido no valor dos itens acima`:(legado>0?`Frete de <b>${formatBRL(legado)}</b> (registrado, não somado ao total)`:'Frete sem custo definido');
+      return `<div class="result-note" style="margin-top:8px">🚚 ${linha} · responsável: <b>${o.frete.responsavel?FRETE_RESPONSAVEL_LABELS[o.frete.responsavel]:'não definido'}</b></div>`;
+    })():''}
     ${o.obs?`<div class="result-note" style="margin-top:10px">${o.obs}</div>`:''}
     ${o.motivoGanho?`<div class="result-note" style="margin-top:6px;color:var(--verde)">✅ Motivo do fechamento: ${o.motivoGanho}</div>`:''}
     ${o.motivoPerda?`<div class="result-note" style="margin-top:6px;color:var(--verm)">❌ Motivo da perda: ${o.motivoPerda}</div>`:''}
@@ -2269,6 +2284,37 @@ function calcularValorFrete(o){
   }
   if(f.tipo==='por_km') return (+f.valor||0)*(+f.km||0);
   return 0;
+}
+function aplicarFreteAosItens(itensRaw, frete){
+  // Embute o custo de frete no valorUnit dos itens, pra compor o preço final mostrado ao cliente
+  // (proposta/PDF/WhatsApp já saem com o valor corrigido). valorUnitBase guarda o preço original
+  // digitado, pra permitir reabrir/editar sem embutir o frete de novo em dobro.
+  const itens=itensRaw.map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnitBase:it.valorUnit, valorUnit:it.valorUnit}));
+  if(!frete || !frete.tipo) return itens;
+  const subtotal=itens.reduce((s,it)=>s+it.qtd*it.valorUnitBase,0);
+  if(frete.tipo==='percentual'){
+    const mult=1+((+frete.valor||0)/100);
+    itens.forEach(it=>{ it.valorUnit=it.valorUnitBase*mult; });
+    return itens;
+  }
+  if(frete.tipo==='por_saco'){
+    const porSaco=+frete.valor||0;
+    if(itens.some(it=>it.unidade==='sc')){
+      itens.forEach(it=>{ if(it.unidade==='sc') it.valorUnit=it.valorUnitBase+porSaco; });
+    }
+    return itens;
+  }
+  const custoFreteTotal = frete.tipo==='valor' ? (+frete.valor||0)
+    : frete.tipo==='por_km' ? (+frete.valor||0)*(+frete.km||0)
+    : 0;
+  if(custoFreteTotal>0 && subtotal>0){
+    itens.forEach(it=>{
+      const valorItem=it.qtd*it.valorUnitBase;
+      const parte=custoFreteTotal*(valorItem/subtotal);
+      it.valorUnit=it.valorUnitBase+(it.qtd?parte/it.qtd:0);
+    });
+  }
+  return itens;
 }
 function gerarParcelasComissao(o,parcelasVenda){
   const totalComissao=calcularValorComissaoTotal(o);
@@ -2699,7 +2745,7 @@ function renderComissoes(){
       ${p.valorPremiacao>0?`
       <div class="result-line" style="margin-top:8px"><span>🏆 Premiação ${p.premiacaoRecebida?'recebida':'prevista'} ${p.dataPremiacaoPrevista}</span><b>${formatBRL(p.valorPremiacao)}</b></div>
       <button class="btn-calc" style="margin-top:6px;background:${p.premiacaoRecebida?'var(--cinza-cl)':'var(--verde)'};color:${p.premiacaoRecebida?'var(--verde)':'#fff'}" onclick="togglePremiacaoRecebida(${orc.id},${p.numero})">${p.premiacaoRecebida?'↩️ Premiação não recebida':'✅ Marcar premiação como recebida'}</button>`:''}
-      ${orc.frete&&calcularValorFrete(orc)>0?`<div class="result-note" style="margin-top:8px">🚚 Frete deste pedido: ${formatBRL(calcularValorFrete(orc))} (registrado, não somado ao total)</div>`:''}
+      ${orc.frete&&(orc.valorFreteEmbutido>0||calcularValorFrete(orc)>0)?`<div class="result-note" style="margin-top:8px">🚚 Frete deste pedido: ${formatBRL(orc.valorFreteEmbutido>0?orc.valorFreteEmbutido:calcularValorFrete(orc))}${orc.valorFreteEmbutido>0?' (já embutido no valor dos itens)':' (registrado, não somado ao total)'}</div>`:''}
       <button class="btn-calc" style="margin-top:8px;background:var(--cinza-cl);color:var(--verde)" onclick="abrirComissaoStatus(${orc.id},'',true)">✏️ Editar comissão / premiação / frete</button>
     </div>`).join('');
   box.innerHTML=`
