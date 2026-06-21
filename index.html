@@ -1828,7 +1828,8 @@ function abrirOrcamento(id){
     ${o.pagamento?`<div class="result-note" style="margin-top:6px">💳 Pagamento: ${({vista:'À vista',prazo:'A prazo',cartao:'Cartão parcelado'})[o.pagamento.forma]||o.pagamento.forma}${o.pagamento.forma==='prazo'?` (${o.pagamento.prazoDias} dias)`:''}${o.pagamento.forma==='cartao'?` (${o.pagamento.parcelas}x)`:''}</div>`:''}
     ${o.comissao&&o.comissao.parcelas?`
     <div class="prod-cat" style="margin-top:18px">Previsão de comissão</div>
-    <div class="result" style="display:block">${o.comissao.parcelas.map(p=>`<div class="result-line"><span>Parcela ${p.numero} — comissão prevista ${p.dataComissaoPrevista}${p.comissaoRecebida?' ✅':''}</span><b>${formatBRL(p.valorComissao)}</b></div>`).join('')}</div>`:''}
+    <div class="result" style="display:block">${o.comissao.parcelas.map(p=>`<div class="result-line"><span>Parcela ${p.numero} — comissão prevista ${p.dataComissaoPrevista}${p.comissaoRecebida?' ✅':''}</span><b>${formatBRL(p.valorComissao)}</b></div>`).join('')}</div>
+    <button class="btn-calc" style="margin-top:8px;background:var(--cinza-cl);color:var(--verde)" onclick="abrirComissaoStatus(${o.id},'',true)">✏️ Editar comissão / premiação / frete</button>`:''}
 
     <div class="prod-cat" style="margin-top:18px">Acompanhamento</div>
     <div class="result" style="display:block;max-height:160px;overflow:auto">${histHtml}</div>
@@ -1889,12 +1890,33 @@ function calcularValorComissaoTotal(o){
 }
 function calcularValorPremiacaoTotal(o){
   const p=o.comissao&&o.comissao.premiacao; if(!p) return 0;
+  if(p.base==='item'){
+    return (p.itens||[]).reduce((s,pi)=>{
+      const item=(o.itens||[]).find(x=>x.produto===pi.produto);
+      if(!item || !pi.valor) return s;
+      const valorItem=item.qtd*item.valorUnit;
+      if(pi.tipo==='percentual') return s+valorItem*(pi.valor/100);
+      if(pi.tipo==='porUnidade') return s+(+pi.valor||0)*item.qtd;
+      return s+(+pi.valor||0);
+    },0);
+  }
   if(p.tipo==='percentual') return (o.total||0)*(p.valor/100);
   if(p.tipo==='por_saco'||p.tipo==='por_litro'){
     const item=(o.itens||[]).find(x=>x.produto===p.produto);
     return item ? (+p.valor||0)*item.qtd : 0;
   }
   return (+p.valor||0);
+}
+function calcularValorFrete(o){
+  const f=o.frete; if(!f||!f.tipo) return 0;
+  if(f.tipo==='percentual') return (o.total||0)*(f.valor/100);
+  if(f.tipo==='valor') return +f.valor||0;
+  if(f.tipo==='por_saco'){
+    const totalSacos=(o.itens||[]).filter(it=>it.unidade==='sc').reduce((s,it)=>s+it.qtd,0);
+    return totalSacos*(+f.valor||0);
+  }
+  if(f.tipo==='por_km') return (+f.valor||0)*(+f.km||0);
+  return 0;
 }
 function gerarParcelasComissao(o,parcelasVenda){
   const totalComissao=calcularValorComissaoTotal(o);
@@ -1915,7 +1937,7 @@ function gerarParcelasComissao(o,parcelasVenda){
     };
   });
 }
-function aplicarStatusOrc(id,status,motivo,pagamento,comissaoConfig){
+function aplicarStatusOrc(id,status,motivo,pagamento,comissaoConfig,frete){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
   o.status=status;
   o.historico=o.historico||[];
@@ -1934,6 +1956,7 @@ function aplicarStatusOrc(id,status,motivo,pagamento,comissaoConfig){
   if(status==='fechado' && pagamento && comissaoConfig){
     o.pagamento=pagamento;
     o.comissao=comissaoConfig;
+    if(frete) o.frete=frete;
     const parcelasVenda=gerarParcelasPagamento(o,pagamento);
     o.comissao.parcelas=gerarParcelasComissao(o,parcelasVenda);
     o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Comissão registrada — previsão de recebimento calculada'});
@@ -1976,77 +1999,136 @@ function confirmarMotivoStatus(id,status){
   if(status==='fechado'){ abrirComissaoStatus(id,motivo); return; }
   aplicarStatusOrc(id,status,motivo);
 }
-function abrirComissaoStatus(id,motivo){
+function abrirComissaoStatus(id,motivo,modoEdicao){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
-  _statusFechamentoPendente={id,motivo};
-  const itensHtml=(o.itens||[]).map((it,i)=>`
+  _statusFechamentoPendente={id,motivo,editando:!!modoEdicao};
+  const pagExistente=modoEdicao&&o.pagamento?o.pagamento:null;
+  const comissaoExistente=modoEdicao&&o.comissao?o.comissao:null;
+  const premExistente=comissaoExistente&&comissaoExistente.premiacao;
+  const freteExistente=modoEdicao&&o.frete?o.frete:null;
+  const itensHtml=(o.itens||[]).map((it,i)=>{
+    const ci=comissaoExistente&&comissaoExistente.base==='item'&&comissaoExistente.itens?comissaoExistente.itens.find(x=>x.produto===it.produto):null;
+    return `
     <div class="row2" style="align-items:end">
-      <div class="field" style="flex:2"><label>${it.produto}</label><select id="cm_it_tipo_${i}" onchange="atualizarPreviaComissao()"><option value="percentual">%</option><option value="valor">R$ fixo</option></select></div>
-      <div class="field"><label>Valor</label><input type="number" id="cm_it_valor_${i}" placeholder="0" oninput="atualizarPreviaComissao()"></div>
-    </div>`).join('');
+      <div class="field" style="flex:2"><label>${it.produto}</label><select id="cm_it_tipo_${i}" onchange="atualizarPreviaComissao()"><option value="percentual" ${ci&&ci.tipo==='percentual'?'selected':''}>%</option><option value="valor" ${ci&&ci.tipo==='valor'?'selected':''}>R$ fixo</option></select></div>
+      <div class="field"><label>Valor</label><input type="number" id="cm_it_valor_${i}" placeholder="0" value="${ci&&ci.valor?ci.valor:''}" oninput="atualizarPreviaComissao()"></div>
+    </div>`;
+  }).join('');
+  const premItensHtml=(o.itens||[]).map((it,i)=>{
+    const pi=premExistente&&premExistente.base==='item'&&premExistente.itens?premExistente.itens.find(x=>x.produto===it.produto):null;
+    return `
+    <div class="row2" style="align-items:end">
+      <div class="field" style="flex:2"><label>${it.produto}</label><select id="cm_premit_tipo_${i}" onchange="atualizarPreviaComissao()">
+        <option value="percentual" ${pi&&pi.tipo==='percentual'?'selected':''}>%</option>
+        <option value="valor" ${pi&&pi.tipo==='valor'?'selected':''}>R$ fixo</option>
+        <option value="porUnidade" ${!pi||pi.tipo==='porUnidade'?'selected':''}>R$/${it.unidade}</option>
+      </select></div>
+      <div class="field"><label>Valor</label><input type="number" id="cm_premit_valor_${i}" placeholder="0" value="${pi&&pi.valor?pi.valor:''}" oninput="atualizarPreviaComissao()"></div>
+    </div>`;
+  }).join('');
+  const cTipo=comissaoExistente&&comissaoExistente.base!=='item'?comissaoExistente.tipo:'percentual';
+  const cValor=comissaoExistente&&comissaoExistente.base!=='item'&&comissaoExistente.valor?comissaoExistente.valor:'';
+  const premBaseAtual=premExistente&&premExistente.base==='item'?'item':'total';
+  const premTipoAtual=premExistente&&premExistente.base!=='item'?premExistente.tipo:'';
+  const premValorAtual=premExistente&&premExistente.base!=='item'&&premExistente.valor?premExistente.valor:'';
   modal(`
     <button class="modal-x" onclick="abrirOrcamento(${id})">✕</button>
-    <h2>💰 Pagamento e comissão</h2>
+    <h2>${modoEdicao?'✏️ Editar comissão':'💰 Pagamento e comissão'}</h2>
     <div class="cli-loc" style="margin-bottom:12px">${o.clienteNome} · Total ${formatBRL(o.total||0)}</div>
     ${condicoesComerciaisHtml(o)}
     <div class="field"><label>Forma de pagamento</label>
       <select id="cm_forma" onchange="atualizarCamposComissao()">
-        <option value="vista">À vista</option>
-        <option value="prazo" selected>A prazo</option>
-        <option value="cartao">Cartão parcelado</option>
+        <option value="vista" ${pagExistente&&pagExistente.forma==='vista'?'selected':''}>À vista</option>
+        <option value="prazo" ${!pagExistente||pagExistente.forma==='prazo'?'selected':''}>A prazo</option>
+        <option value="cartao" ${pagExistente&&pagExistente.forma==='cartao'?'selected':''}>Cartão parcelado</option>
       </select>
     </div>
-    <div id="cm_wrapPrazo" class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="cm_prazoDias" value="${o.prazoDiasPadrao||30}" oninput="atualizarPreviaComissao()"></div>
+    <div id="cm_wrapPrazo" class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="cm_prazoDias" value="${pagExistente&&pagExistente.prazoDias!=null?pagExistente.prazoDias:(o.prazoDiasPadrao||30)}" oninput="atualizarPreviaComissao()"></div>
     <div id="cm_wrapCartao" class="row2" style="display:none">
-      <div class="field"><label>Nº de parcelas</label><input type="number" id="cm_parcelas" value="2" oninput="atualizarPreviaComissao()"></div>
-      <div class="field"><label>Intervalo entre parcelas (dias)</label><input type="number" id="cm_intervalo" value="30" oninput="atualizarPreviaComissao()"></div>
+      <div class="field"><label>Nº de parcelas</label><input type="number" id="cm_parcelas" value="${pagExistente&&pagExistente.parcelas!=null?pagExistente.parcelas:2}" oninput="atualizarPreviaComissao()"></div>
+      <div class="field"><label>Intervalo entre parcelas (dias)</label><input type="number" id="cm_intervalo" value="${pagExistente&&pagExistente.intervaloDias!=null?pagExistente.intervaloDias:30}" oninput="atualizarPreviaComissao()"></div>
     </div>
 
     <div class="prod-cat" style="margin-top:14px">Comissão</div>
     <div class="field"><label>Calcular sobre</label>
       <select id="cm_base" onchange="toggleComissaoBase()">
-        <option value="total">Pedido completo</option>
-        <option value="item">Por produto</option>
+        <option value="total" ${!comissaoExistente||comissaoExistente.base!=='item'?'selected':''}>Pedido completo</option>
+        <option value="item" ${comissaoExistente&&comissaoExistente.base==='item'?'selected':''}>Por produto</option>
       </select>
     </div>
     <div id="cm_wrapTotal" class="row2">
-      <div class="field"><label>Tipo</label><select id="cm_tipo" onchange="atualizarPreviaComissao()"><option value="percentual">% sobre o total</option><option value="valor">Valor fixo (R$)</option></select></div>
-      <div class="field"><label>Valor</label><input type="number" id="cm_valor" placeholder="ex: 3" oninput="atualizarPreviaComissao()"></div>
+      <div class="field"><label>Tipo</label><select id="cm_tipo" onchange="atualizarPreviaComissao()"><option value="percentual" ${cTipo!=='valor'?'selected':''}>% sobre o total</option><option value="valor" ${cTipo==='valor'?'selected':''}>Valor fixo (R$)</option></select></div>
+      <div class="field"><label>Valor</label><input type="number" id="cm_valor" placeholder="ex: 3" value="${cValor}" oninput="atualizarPreviaComissao()"></div>
     </div>
     <div id="cm_wrapItens" style="display:none">${itensHtml}</div>
 
     <div class="prod-cat" style="margin-top:14px">Premiação (opcional)</div>
-    <div class="row2">
+    <div class="field"><label>Calcular sobre</label>
+      <select id="cm_premBase" onchange="atualizarCamposPremiacao()">
+        <option value="total" ${premBaseAtual==='total'?'selected':''}>Pedido completo</option>
+        <option value="item" ${premBaseAtual==='item'?'selected':''}>Por produto</option>
+      </select>
+    </div>
+    <div id="cm_wrapPremTotal" class="row2">
       <div class="field"><label>Tipo</label><select id="cm_premTipo" onchange="atualizarCamposPremiacao()">
-        <option value="">Sem premiação</option>
-        <option value="percentual">% sobre o total</option>
-        <option value="valor">Valor fixo (R$)</option>
-        <option value="por_saco">Valor por saco (R$/sc)</option>
-        <option value="por_litro">Valor por litro (R$/L)</option>
+        <option value="" ${!premTipoAtual?'selected':''}>Sem premiação</option>
+        <option value="percentual" ${premTipoAtual==='percentual'?'selected':''}>% sobre o total</option>
+        <option value="valor" ${premTipoAtual==='valor'?'selected':''}>Valor fixo (R$)</option>
+        <option value="por_saco" ${premTipoAtual==='por_saco'?'selected':''}>Valor por saco (R$/sc)</option>
+        <option value="por_litro" ${premTipoAtual==='por_litro'?'selected':''}>Valor por litro (R$/L)</option>
       </select></div>
-      <div class="field"><label>Valor</label><input type="number" id="cm_premValor" placeholder="0" oninput="atualizarPreviaComissao()"></div>
+      <div class="field"><label>Valor</label><input type="number" id="cm_premValor" placeholder="0" value="${premValorAtual}" oninput="atualizarPreviaComissao()"></div>
     </div>
     <div id="cm_wrapPremProduto" class="field" style="display:none"><label>Produto premiado</label><select id="cm_premProduto" onchange="atualizarPreviaComissao()"></select></div>
+    <div id="cm_wrapPremItens" style="display:none">${premItensHtml}</div>
+
+    <div class="prod-cat" style="margin-top:14px">Frete (opcional)</div>
+    <div class="row2">
+      <div class="field"><label>Tipo</label><select id="cm_freteTipo" onchange="atualizarCamposFrete()">
+        <option value="" ${!freteExistente||!freteExistente.tipo?'selected':''}>Sem frete (incluso/grátis)</option>
+        <option value="percentual" ${freteExistente&&freteExistente.tipo==='percentual'?'selected':''}>% sobre o total</option>
+        <option value="valor" ${freteExistente&&freteExistente.tipo==='valor'?'selected':''}>Valor fixo (R$)</option>
+        <option value="por_saco" ${freteExistente&&freteExistente.tipo==='por_saco'?'selected':''}>Valor por saco (R$/sc)</option>
+        <option value="por_km" ${freteExistente&&freteExistente.tipo==='por_km'?'selected':''}>Valor por km rodado (R$/km)</option>
+      </select></div>
+      <div class="field"><label>Valor</label><input type="number" id="cm_freteValor" placeholder="0" value="${freteExistente&&freteExistente.valor?freteExistente.valor:''}" oninput="atualizarPreviaComissao()"></div>
+    </div>
+    <div id="cm_wrapFreteKm" class="field" style="display:none"><label>Km rodado</label><input type="number" id="cm_freteKm" placeholder="0" value="${freteExistente&&freteExistente.km?freteExistente.km:''}" oninput="atualizarPreviaComissao()"></div>
+    <div class="result-note" style="margin-top:6px">O frete definido aqui não é somado automaticamente ao total do pedido — fica só registrado para controle (ex: pedidos sem cobrança de frete).</div>
 
     <div class="prod-cat" style="margin-top:14px">Previsão de recebimento</div>
     <div id="cm_previewPrevisao" class="result" style="display:block"></div>
 
+    ${modoEdicao?`
+    <button class="btn-calc" style="margin-top:14px" onclick="confirmarEdicaoComissao()">✅ Salvar alterações</button>
+    `:`
     <button class="btn-calc" style="margin-top:14px" onclick="confirmarComissaoStatus()">✅ Confirmar e fechar venda</button>
     <button onclick="pularComissao()" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verde);border-radius:12px;font-size:15px;font-weight:700">⏭️ Fechar sem registrar comissão agora</button>
+    `}
   `);
   atualizarCamposComissao();
+  toggleComissaoBase();
   atualizarCamposPremiacao();
+  atualizarCamposFrete();
 }
 function atualizarCamposPremiacao(){
   if(!_statusFechamentoPendente) return;
   const o=DB.orcamentos.find(x=>x.id===_statusFechamentoPendente.id); if(!o) return;
+  const base=document.getElementById('cm_premBase').value;
+  document.getElementById('cm_wrapPremTotal').style.display=base==='total'?'flex':'none';
+  document.getElementById('cm_wrapPremItens').style.display=base==='item'?'block':'none';
   const tipo=document.getElementById('cm_premTipo').value;
   const wrap=document.getElementById('cm_wrapPremProduto');
-  const porUnidade=tipo==='por_saco'||tipo==='por_litro';
+  const porUnidade=base==='total'&&(tipo==='por_saco'||tipo==='por_litro');
   wrap.style.display=porUnidade?'block':'none';
   if(porUnidade){
     document.getElementById('cm_premProduto').innerHTML=(o.itens||[]).map(it=>`<option value="${it.produto}">${it.produto} (${it.qtd} ${it.unidade})</option>`).join('');
   }
+  atualizarPreviaComissao();
+}
+function atualizarCamposFrete(){
+  const tipo=document.getElementById('cm_freteTipo').value;
+  document.getElementById('cm_wrapFreteKm').style.display=tipo==='por_km'?'block':'none';
   atualizarPreviaComissao();
 }
 function atualizarCamposComissao(){
@@ -2082,36 +2164,74 @@ function lerFormComissao(o){
     comissaoConfig.tipo=document.getElementById('cm_tipo').value;
     comissaoConfig.valor=+document.getElementById('cm_valor').value||0;
   }
-  const premTipo=document.getElementById('cm_premTipo').value;
-  if(premTipo){
-    comissaoConfig.premiacao={tipo:premTipo,valor:+document.getElementById('cm_premValor').value||0};
-    if(premTipo==='por_saco'||premTipo==='por_litro'){
-      comissaoConfig.premiacao.produto=document.getElementById('cm_premProduto').value;
+  const premBase=document.getElementById('cm_premBase').value;
+  if(premBase==='item'){
+    const itensPrem=(o.itens||[]).map((it,i)=>({
+      produto:it.produto,
+      tipo:document.getElementById('cm_premit_tipo_'+i).value,
+      valor:+document.getElementById('cm_premit_valor_'+i).value||0
+    })).filter(pi=>pi.valor>0);
+    if(itensPrem.length) comissaoConfig.premiacao={base:'item',itens:itensPrem};
+  } else {
+    const premTipo=document.getElementById('cm_premTipo').value;
+    if(premTipo){
+      comissaoConfig.premiacao={tipo:premTipo,valor:+document.getElementById('cm_premValor').value||0};
+      if(premTipo==='por_saco'||premTipo==='por_litro'){
+        comissaoConfig.premiacao.produto=document.getElementById('cm_premProduto').value;
+      }
     }
   }
-  return {pagamento,comissaoConfig};
+  const freteTipo=document.getElementById('cm_freteTipo').value;
+  let frete=null;
+  if(freteTipo){
+    frete={tipo:freteTipo,valor:+document.getElementById('cm_freteValor').value||0};
+    if(freteTipo==='por_km') frete.km=+document.getElementById('cm_freteKm').value||0;
+  }
+  return {pagamento,comissaoConfig,frete};
 }
 function atualizarPreviaComissao(){
   if(!_statusFechamentoPendente) return;
   const o=DB.orcamentos.find(x=>x.id===_statusFechamentoPendente.id); if(!o) return;
   const box=document.getElementById('cm_previewPrevisao'); if(!box) return;
-  const {pagamento,comissaoConfig}=lerFormComissao(o);
-  const oTemp=Object.assign({},o,{comissao:comissaoConfig});
+  const {pagamento,comissaoConfig,frete}=lerFormComissao(o);
+  const oTemp=Object.assign({},o,{comissao:comissaoConfig,frete});
   const parcelasVenda=gerarParcelasPagamento(oTemp,pagamento);
   const parcelasComissao=gerarParcelasComissao(oTemp,parcelasVenda);
+  const valorFrete=calcularValorFrete(oTemp);
   box.innerHTML=parcelasComissao.map(p=>`
     <div class="result-line"><span>Parcela ${p.numero} — quitação prevista ${p.dataQuitacaoPrevista}</span><b>${formatBRL(p.valorParcela)}</b></div>
     <div class="result-line" style="color:var(--verde)"><span>↳ Comissão prevista (dia 15) ${p.dataComissaoPrevista}</span><b>${formatBRL(p.valorComissao)}</b></div>
     ${p.valorPremiacao>0?`<div class="result-line" style="color:var(--cinza)"><span>↳ Premiação prevista (dia 25) ${p.dataPremiacaoPrevista}</span><b>${formatBRL(p.valorPremiacao)}</b></div>`:''}
-  `).join('');
+  `).join('') + (valorFrete>0?`<div class="result-line" style="color:var(--cinza);margin-top:6px"><span>🚚 Frete registrado (não somado ao total)</span><b>${formatBRL(valorFrete)}</b></div>`:'');
 }
 function confirmarComissaoStatus(){
   if(!_statusFechamentoPendente) return;
   const {id,motivo}=_statusFechamentoPendente;
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
-  const {pagamento,comissaoConfig}=lerFormComissao(o);
+  const {pagamento,comissaoConfig,frete}=lerFormComissao(o);
   _statusFechamentoPendente=null;
-  aplicarStatusOrc(id,'fechado',motivo,pagamento,comissaoConfig);
+  aplicarStatusOrc(id,'fechado',motivo,pagamento,comissaoConfig,frete);
+}
+function confirmarEdicaoComissao(){
+  if(!_statusFechamentoPendente) return;
+  const {id}=_statusFechamentoPendente;
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  const {pagamento,comissaoConfig,frete}=lerFormComissao(o);
+  const parcelasAntigas=(o.comissao&&o.comissao.parcelas)||[];
+  o.pagamento=pagamento;
+  o.frete=frete;
+  const parcelasVenda=gerarParcelasPagamento(o,pagamento);
+  const novasParcelas=gerarParcelasComissao(Object.assign({},o,{comissao:comissaoConfig}),parcelasVenda);
+  novasParcelas.forEach(np=>{
+    const antiga=parcelasAntigas.find(ap=>ap.numero===np.numero);
+    if(antiga){ np.comissaoRecebida=antiga.comissaoRecebida; np.premiacaoRecebida=antiga.premiacaoRecebida; }
+  });
+  comissaoConfig.parcelas=novasParcelas;
+  o.comissao=comissaoConfig;
+  o.historico=o.historico||[];
+  o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Comissão, premiação e/ou frete editados manualmente'});
+  _statusFechamentoPendente=null;
+  saveDB();fecharModal();renderOrcamentos();renderComissoes();renderKPIs();
 }
 function pularComissao(){
   if(!_statusFechamentoPendente) return;
@@ -2149,6 +2269,8 @@ function renderComissoes(){
   linhas.sort((a,b)=>(a.p.dataComissaoPrevista||'').localeCompare(b.p.dataComissaoPrevista||''));
   const aReceber=linhas.filter(l=>!l.p.comissaoRecebida).reduce((s,l)=>s+l.p.valorComissao,0);
   const recebido=linhas.filter(l=>l.p.comissaoRecebida).reduce((s,l)=>s+l.p.valorComissao,0);
+  const premAReceber=linhas.filter(l=>l.p.valorPremiacao>0 && !l.p.premiacaoRecebida).reduce((s,l)=>s+l.p.valorPremiacao,0);
+  const premRecebido=linhas.filter(l=>l.p.valorPremiacao>0 && l.p.premiacaoRecebida).reduce((s,l)=>s+l.p.valorPremiacao,0);
   const cards=linhas.map(({orc,p})=>`
     <div class="cli-card">
       <div class="cli-top">
@@ -2161,13 +2283,19 @@ function renderComissoes(){
       </div>
       <button class="btn-calc" style="margin-top:8px;background:${p.comissaoRecebida?'var(--cinza-cl)':'var(--verde)'};color:${p.comissaoRecebida?'var(--verde)':'#fff'}" onclick="toggleComissaoRecebida(${orc.id},${p.numero})">${p.comissaoRecebida?'↩️ Marcar como não recebida':'✅ Marcar comissão como recebida'}</button>
       ${p.valorPremiacao>0?`
-      <div class="result-line" style="margin-top:8px"><span>🏆 Premiação prevista ${p.dataPremiacaoPrevista}</span><b>${formatBRL(p.valorPremiacao)}</b></div>
-      <button class="btn-calc" style="margin-top:6px;background:var(--cinza-cl);color:var(--verde)" onclick="togglePremiacaoRecebida(${orc.id},${p.numero})">${p.premiacaoRecebida?'↩️ Premiação não recebida':'✅ Marcar premiação como recebida'}</button>`:''}
+      <div class="result-line" style="margin-top:8px"><span>🏆 Premiação ${p.premiacaoRecebida?'recebida':'prevista'} ${p.dataPremiacaoPrevista}</span><b>${formatBRL(p.valorPremiacao)}</b></div>
+      <button class="btn-calc" style="margin-top:6px;background:${p.premiacaoRecebida?'var(--cinza-cl)':'var(--verde)'};color:${p.premiacaoRecebida?'var(--verde)':'#fff'}" onclick="togglePremiacaoRecebida(${orc.id},${p.numero})">${p.premiacaoRecebida?'↩️ Premiação não recebida':'✅ Marcar premiação como recebida'}</button>`:''}
+      ${orc.frete&&calcularValorFrete(orc)>0?`<div class="result-note" style="margin-top:8px">🚚 Frete deste pedido: ${formatBRL(calcularValorFrete(orc))} (registrado, não somado ao total)</div>`:''}
+      <button class="btn-calc" style="margin-top:8px;background:var(--cinza-cl);color:var(--verde)" onclick="abrirComissaoStatus(${orc.id},'',true)">✏️ Editar comissão / premiação / frete</button>
     </div>`).join('');
   box.innerHTML=`
     <div class="cli-stats" style="margin-bottom:10px">
-      <div class="cli-stat"><div class="n">${formatBRL(aReceber)}</div><div class="l">a receber</div></div>
-      <div class="cli-stat"><div class="n">${formatBRL(recebido)}</div><div class="l">recebido</div></div>
+      <div class="cli-stat"><div class="n">${formatBRL(aReceber)}</div><div class="l">comissão a receber</div></div>
+      <div class="cli-stat"><div class="n">${formatBRL(recebido)}</div><div class="l">comissão recebida</div></div>
+    </div>
+    <div class="cli-stats" style="margin-bottom:10px">
+      <div class="cli-stat"><div class="n">${formatBRL(premAReceber)}</div><div class="l">premiação a receber</div></div>
+      <div class="cli-stat"><div class="n">${formatBRL(premRecebido)}</div><div class="l">premiação recebida</div></div>
     </div>
     ${cards}`;
 }
@@ -2195,20 +2323,10 @@ function condicoesComerciaisHtml(o){
       avisos.push(`💡 ${it.produto}: ${it.qtd} sacos — pedido acima de 250 sc pode receber desconto por volume (defina o % na negociação).`);
     }
   });
-  let vetoquinolTotal=0, outrosTotal=0, temNutricao=false;
-  (o.itens||[]).forEach(it=>{
+  const temNutricao=(o.itens||[]).some(it=>{
     const p=buscarProdutoPorNomeBase(it.produto);
-    const subtotal=it.qtd*it.valorUnit;
-    if(p && (p.f||'').toUpperCase().includes('VETOQUINOL')) vetoquinolTotal+=subtotal;
-    else outrosTotal+=subtotal;
-    if(p && (p.l||'').toUpperCase().includes('NUTRICAO')) temNutricao=true;
+    return p && (p.l||'').toUpperCase().includes('NUTRICAO');
   });
-  if(vetoquinolTotal>0){
-    avisos.push(`🚚 Linha Vetoquinol (${formatBRL(vetoquinolTotal)}): frete de até 1,5% (${formatBRL(vetoquinolTotal*0.015)}) — gratuito ao cliente.`);
-  }
-  if(outrosTotal>0){
-    avisos.push(`🚚 Demais linhas (${formatBRL(outrosTotal)}): frete de ~3% (${formatBRL(outrosTotal*0.03)}) já incluso no preço dos produtos.`);
-  }
   if(temNutricao){
     avisos.push('🌱 Itens da linha Nutrição são sempre calculados por saco (sc).');
   }
@@ -2342,6 +2460,11 @@ function gerarPDFConteudo(orcId, tipo, logoImg){
       o.comissao.parcelas.forEach(p=>{
         doc.text(`Parcela ${p.numero}: ${formatBRL(p.valorParcela)} — quitação prevista ${p.dataQuitacaoPrevista}`, 14, y); y+=5;
       });
+    }
+    const valorFretePdf=calcularValorFrete(o);
+    if(valorFretePdf>0){
+      const freteLbl={percentual:'% sobre o total',valor:'valor fixo',por_saco:'por saco',por_km:'por km rodado'}[o.frete.tipo]||o.frete.tipo;
+      doc.text(`Frete (${freteLbl}): ${formatBRL(valorFretePdf)}`, 14, y); y+=5;
     }
     y+=5;
   } else if(tipo==='orcamento'){
