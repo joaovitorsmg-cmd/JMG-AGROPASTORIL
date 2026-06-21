@@ -1855,6 +1855,7 @@ function mudarStatusOrc(id,status){
 }
 let _statusFechamentoPendente=null;
 const FORMA_PAGAMENTO_LABELS={vista:'À vista',prazo:'A prazo',parcelado:'Prazo parcelado',cartao:'Cartão parcelado',safra:'Safra',vendor:'Vendor'};
+const FRETE_RESPONSAVEL_LABELS={cliente:'Por conta do cliente',agroquima:'Agroquima Entrega',transportadora:'Transportadora'};
 function addDias(dataISO,dias){
   const d=new Date(dataISO+'T00:00:00');
   d.setDate(d.getDate()+(+dias||0));
@@ -2129,6 +2130,15 @@ function abrirComissaoStatus(id,motivo,modoEdicao){
     </div>
     <div id="cm_wrapFreteKm" class="field" style="display:none"><label>Km rodado</label><input type="number" id="cm_freteKm" placeholder="0" value="${freteExistente&&freteExistente.km?freteExistente.km:''}" oninput="atualizarPreviaComissao()"></div>
     <div class="result-note" style="margin-top:6px">O frete definido aqui não é somado automaticamente ao total do pedido — fica só registrado para controle (ex: pedidos sem cobrança de frete).</div>
+    <div class="field" style="margin-top:10px"><label>Responsável pela entrega</label>
+      <select id="cm_freteResponsavel">
+        <option value="" ${!freteExistente||!freteExistente.responsavel?'selected':''}>Não definido</option>
+        <option value="cliente" ${freteExistente&&freteExistente.responsavel==='cliente'?'selected':''}>Por conta do cliente</option>
+        <option value="agroquima" ${freteExistente&&freteExistente.responsavel==='agroquima'?'selected':''}>Agroquima Entrega</option>
+        <option value="transportadora" ${freteExistente&&freteExistente.responsavel==='transportadora'?'selected':''}>Transportadora</option>
+      </select>
+    </div>
+    <div class="result-note" style="margin-top:2px">⚠️ Só esse rótulo aparece no PDF do cliente — o valor do frete nunca é enviado a ele.</div>
 
     <div class="prod-cat" style="margin-top:14px">Previsão de recebimento</div>
     <div id="cm_previewPrevisao" class="result" style="display:block"></div>
@@ -2242,10 +2252,14 @@ function lerFormComissao(o){
     }
   }
   const freteTipo=document.getElementById('cm_freteTipo').value;
+  const freteResponsavel=document.getElementById('cm_freteResponsavel').value;
   let frete=null;
-  if(freteTipo){
-    frete={tipo:freteTipo,valor:+document.getElementById('cm_freteValor').value||0};
-    if(freteTipo==='por_km') frete.km=+document.getElementById('cm_freteKm').value||0;
+  if(freteTipo||freteResponsavel){
+    frete={tipo:freteTipo||null, responsavel:freteResponsavel||null};
+    if(freteTipo){
+      frete.valor=+document.getElementById('cm_freteValor').value||0;
+      if(freteTipo==='por_km') frete.km=+document.getElementById('cm_freteKm').value||0;
+    }
   }
   return {pagamento,comissaoConfig,frete};
 }
@@ -2399,17 +2413,75 @@ function telWhats(fone){
   if(!d.startsWith('55')) d='55'+d;
   return d;
 }
-function enviarWhatsapp(o,c,fone){
+function saudacaoAtual(){
+  const h=new Date().getHours();
+  if(h<12) return 'Bom dia';
+  if(h<18) return 'Boa tarde';
+  return 'Boa noite';
+}
+function mensagemPadraoWhatsapp(o,c){
   const primeiroNome=(c.nome||'').split(' ')[0]||c.nome;
-  const msg=`Olá ${primeiroNome}! Passando para saber se já conseguiu avaliar o orçamento que te enviei (total ${formatBRL(o.total||0)}). Posso ajudar com alguma dúvida ou já fechar o pedido?`;
+  return `${saudacaoAtual()}, ${primeiroNome}! Tudo bão? 😊 Passando aqui pra saber se já deu uma olhadinha no orçamento que te mandei (total ${formatBRL(o.total||0)}). Ficou alguma dúvida? Se quiser já fechar o pedido, me chama!`;
+}
+function enviarWhatsapp(o,c,fone,comPdf){
+  const msg=mensagemPadraoWhatsapp(o,c);
+  if(comPdf){ compartilharPdfWhatsapp(o.id,fone,msg); return; }
   window.open(`https://wa.me/${fone}?text=${encodeURIComponent(msg)}`,'_blank');
+}
+function compartilharPdfWhatsapp(orcId,fone,msg){
+  const prosseguir=(img)=>{
+    const doc=construirDocPDF(orcId,'orcamento',img); if(!doc) return;
+    const o=DB.orcamentos.find(x=>x.id===orcId);
+    const c=DB.clientes.find(x=>x.id===o.clienteId);
+    const nomeArq=`orcamento-${(c?.nome||'cliente').replace(/[^a-zA-Z0-9]+/g,'-')}-${o.id}.pdf`;
+    const podeCompartilharArquivo=typeof navigator.canShare==='function' && typeof File!=='undefined';
+    if(podeCompartilharArquivo){
+      const file=new File([doc.output('blob')],nomeArq,{type:'application/pdf'});
+      if(navigator.canShare({files:[file]})){
+        navigator.share({files:[file],text:msg}).catch(()=>{
+          window.open(`https://wa.me/${fone}?text=${encodeURIComponent(msg)}`,'_blank');
+        });
+        return;
+      }
+    }
+    doc.save(nomeArq);
+    window.open(`https://wa.me/${fone}?text=${encodeURIComponent(msg)}`,'_blank');
+    alert('O PDF do orçamento foi baixado. Anexe o arquivo na conversa do WhatsApp que abriu.');
+  };
+  if(typeof window.jspdf==='undefined'){
+    alert('Gerador de PDF ainda não carregou. Verifique sua conexão e tente novamente — a mensagem vai ser enviada sem o PDF.');
+    window.open(`https://wa.me/${fone}?text=${encodeURIComponent(msg)}`,'_blank');
+    return;
+  }
+  if(_logoPedidoImg){ prosseguir(_logoPedidoImg); return; }
+  const img=new Image();
+  img.onload=()=>{ _logoPedidoImg=img; prosseguir(img); };
+  img.onerror=()=>{ prosseguir(null); };
+  img.src='logo-jmg-pedido.png';
 }
 function cobrarWhatsapp(id){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
   const c=DB.clientes.find(x=>x.id===o.clienteId);
   const fone=telWhats(c?.telefone);
   if(!fone){ abrirPedirTelefoneWhatsapp(id); return; }
-  enviarWhatsapp(o,c,fone);
+  abrirOpcaoPdfWhatsapp(id);
+}
+function abrirOpcaoPdfWhatsapp(id){
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  modal(`
+    <button class="modal-x" onclick="abrirOrcamento(${id})">✕</button>
+    <h2>💬 Cobrar no WhatsApp</h2>
+    <div class="cli-loc" style="margin-bottom:14px">${o.clienteNome} — enviar o PDF do orçamento junto com a mensagem?</div>
+    <button class="btn-calc" onclick="confirmarEnvioWhatsapp(${id},true)">📄 Sim, enviar com o PDF</button>
+    <button onclick="confirmarEnvioWhatsapp(${id},false)" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verde);border-radius:12px;font-size:15px;font-weight:700">💬 Só a mensagem, sem PDF</button>
+  `);
+}
+function confirmarEnvioWhatsapp(id,comPdf){
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  const c=DB.clientes.find(x=>x.id===o.clienteId);
+  const fone=telWhats(c?.telefone);
+  if(!fone){ abrirPedirTelefoneWhatsapp(id); return; }
+  enviarWhatsapp(o,c,fone,comPdf);
 }
 function abrirPedirTelefoneWhatsapp(id){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
@@ -2430,8 +2502,7 @@ function confirmarTelefoneWhatsapp(id){
   if(!fone){alert('Informe um telefone válido.');return;}
   c.telefone=tel;
   saveDB();
-  enviarWhatsapp(o,c,fone);
-  abrirOrcamento(id);
+  abrirOpcaoPdfWhatsapp(id);
 }
 
 /* ---- GERAÇÃO DE PDF (orçamento / pedido) — usa jsPDF via CDN ---- */
@@ -2447,8 +2518,8 @@ function gerarPDF(orcId, tipo){
   img.onerror=()=>{ gerarPDFConteudo(orcId,tipo,null); };
   img.src='logo-jmg-pedido.png';
 }
-function gerarPDFConteudo(orcId, tipo, logoImg){
-  const o=DB.orcamentos.find(x=>x.id===orcId); if(!o) return;
+function construirDocPDF(orcId, tipo, logoImg){
+  const o=DB.orcamentos.find(x=>x.id===orcId); if(!o) return null;
   const c=DB.clientes.find(x=>x.id===o.clienteId);
   const { jsPDF }=window.jspdf;
   const doc=new jsPDF();
@@ -2521,10 +2592,8 @@ function gerarPDFConteudo(orcId, tipo, logoImg){
         doc.text(`Parcela ${p.numero}: ${formatBRL(p.valorParcela)} — quitação prevista ${p.dataQuitacaoPrevista}`, 14, y); y+=5;
       });
     }
-    const valorFretePdf=calcularValorFrete(o);
-    if(valorFretePdf>0){
-      const freteLbl={percentual:'% sobre o total',valor:'valor fixo',por_saco:'por saco',por_km:'por km rodado'}[o.frete.tipo]||o.frete.tipo;
-      doc.text(`Frete (${freteLbl}): ${formatBRL(valorFretePdf)}`, 14, y); y+=5;
+    if(o.frete && o.frete.responsavel){
+      doc.text(`Frete: ${FRETE_RESPONSAVEL_LABELS[o.frete.responsavel]||o.frete.responsavel}`, 14, y); y+=5;
     }
     y+=5;
   } else if(tipo==='orcamento'){
@@ -2543,6 +2612,12 @@ function gerarPDFConteudo(orcId, tipo, logoImg){
   doc.setFontSize(9); doc.setTextColor(120);
   doc.text('Documento gerado pelo Painel do Representante — JMG Agropastoril', 14, 285);
 
+  return doc;
+}
+function gerarPDFConteudo(orcId, tipo, logoImg){
+  const doc=construirDocPDF(orcId,tipo,logoImg); if(!doc) return;
+  const o=DB.orcamentos.find(x=>x.id===orcId);
+  const c=DB.clientes.find(x=>x.id===o.clienteId);
   doc.save(`${tipo}-${(c?.nome||'cliente').replace(/[^a-zA-Z0-9]+/g,'-')}-${o.id}.pdf`);
 }
 
