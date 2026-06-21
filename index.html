@@ -16,6 +16,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+<script src="./produtos-base.js" defer></script>
 <style>
 :root{
   --verde:#367C2B; --verde-esc:#1E4A18; --verde-cl:#EAF4E7;
@@ -91,6 +92,13 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .field input,.field select{width:100%;padding:12px 14px;border:2px solid var(--borda);border-radius:10px;background:#fff}
 .field input:focus,.field select:focus{outline:none;border-color:var(--verde)}
 .field .hint{font-size:11px;color:var(--cinza);margin-top:4px}
+.field.autoc-box{position:relative}
+.autoc-list{position:absolute;left:0;right:0;top:100%;background:#fff;border:2px solid var(--verde);border-top:none;border-radius:0 0 10px 10px;max-height:260px;overflow:auto;z-index:60;box-shadow:var(--sombra2)}
+.autoc-item{padding:10px 14px;border-bottom:1px solid var(--borda);cursor:pointer}
+.autoc-item:last-child{border-bottom:none}
+.autoc-item:hover,.autoc-item:active{background:var(--cinza-cl)}
+.autoc-nome{font-weight:700;font-size:14px;color:var(--txt)}
+.autoc-meta{font-size:11px;color:var(--cinza);margin-top:2px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .btn-calc{width:100%;padding:14px;background:var(--verde);color:#fff;border-radius:12px;font-size:15px;font-weight:700;margin-top:4px}
 .btn-calc:active{background:var(--verde-esc)}
@@ -481,9 +489,9 @@ input,select,textarea{font-family:inherit;font-size:15px}
       <h3>⚡ Orçamento rápido <span class="badge-tec">na hora, pro cliente ver</span></h3>
       <div id="rapidoItensBox"><div class="result-note">Nenhum item adicionado ainda</div></div>
       <div class="row2" style="margin-top:10px">
-        <div class="field"><label>Produto</label>
-          <input id="rp_prod" list="rapidoProdutos" placeholder="digite ou escolha da lista" oninput="autoPrecoRapido()">
-          <datalist id="rapidoProdutos"></datalist>
+        <div class="field autoc-box"><label>Produto</label>
+          <input id="rp_prod" placeholder="digite para buscar no catálogo" autocomplete="off" oninput="autoPrecoRapido();buscarProdutoAutocomplete('rp_prod','rp_prod_sug')" onblur="fecharAutocompleteProduto('rp_prod_sug')">
+          <div class="autoc-list" id="rp_prod_sug" style="display:none"></div>
         </div>
         <div class="field"><label>Qtd.</label><input type="number" id="rp_qtd" placeholder="0"></div>
       </div>
@@ -941,7 +949,7 @@ function switchCalc(c){
   document.getElementById('c-'+c).style.display='block';
   document.querySelectorAll('#calcTabs .subtab').forEach(t=>t.classList.toggle('active',t.dataset.c===c));
   if(c==='precos') renderListaPrecos();
-  if(c==='rapido'){ popularDatalistRapido(); renderRapidoItens(); }
+  if(c==='rapido'){ renderRapidoItens(); }
 }
 
 /* SEMENTES */
@@ -1118,6 +1126,56 @@ async function extrairTextoDocx(arrayBuffer){
 function normalizarHeader(s){
   return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
 }
+/* ============================================================
+   BASE DE PRODUTOS (cat\u00e1logo oficial) \u2014 busca para autocompletar
+   qualquer campo de produto, mostrando linha/sub-linha/fabricante
+   para ajudar a lembrar exatamente qual item \u00e9.
+============================================================ */
+function buscarProdutosBase(q,limite){
+  limite = limite||25;
+  if(typeof PRODUTOS_BASE === 'undefined') return [];
+  const nq = normalizarHeader(q);
+  if(nq.length<2) return [];
+  const termos = nq.split(/\s+/).filter(Boolean);
+  const out=[];
+  for(const p of PRODUTOS_BASE){
+    const nn = normalizarHeader(p.n);
+    if(termos.every(t=>nn.includes(t))) out.push(p);
+  }
+  out.sort((a,b)=>{
+    const an=normalizarHeader(a.n), bn=normalizarHeader(b.n);
+    const aStarts=an.startsWith(nq)?0:1, bStarts=bn.startsWith(nq)?0:1;
+    if(aStarts!==bStarts) return aStarts-bStarts;
+    return an.length-bn.length;
+  });
+  return out.slice(0,limite);
+}
+function buscarProdutoAutocomplete(inputId,boxId){
+  const input=document.getElementById(inputId);
+  const box=document.getElementById(boxId);
+  if(!input||!box) return;
+  const resultados=buscarProdutosBase(input.value,25);
+  if(!resultados.length){ box.innerHTML=''; box.style.display='none'; return; }
+  box._resultados=resultados;
+  box.innerHTML=resultados.map((p,i)=>`
+    <div class="autoc-item" onclick="selecionarProdutoAutocomplete('${inputId}','${boxId}',${i})">
+      <div class="autoc-nome">${p.n}</div>
+      <div class="autoc-meta">${[p.l,p.s,p.f].filter(Boolean).join(' \u00b7 ')}</div>
+    </div>`).join('');
+  box.style.display='block';
+}
+function selecionarProdutoAutocomplete(inputId,boxId,idx){
+  const box=document.getElementById(boxId);
+  const p=box._resultados && box._resultados[idx];
+  if(!p) return;
+  const input=document.getElementById(inputId);
+  input.value=p.n;
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+  box.innerHTML=''; box.style.display='none';
+}
+function fecharAutocompleteProduto(boxId){
+  setTimeout(()=>{ const box=document.getElementById(boxId); if(box){ box.innerHTML=''; box.style.display='none'; } },150);
+}
 function parsePrecoCelula(v){
   if(v===null || v===undefined || v==='') return 0;
   if(typeof v === 'number') return v;
@@ -1269,11 +1327,6 @@ function renderRapidoItens(){
   box.innerHTML = _rapidoItens.map((it,i)=>`
     <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.preco)} <button onclick="removerItemRapido(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('')
     + `<div class="result-line" style="margin-top:6px;font-size:16px"><span>Subtotal</span><b>${formatBRL(total)}</b></div>`;
-}
-function popularDatalistRapido(){
-  const dl = document.getElementById('rapidoProdutos');
-  if(!dl) return;
-  dl.innerHTML = (DB.listaPrecos||[]).map(it=>`<option value="${it.produto}">`).join('');
 }
 function visualizarOrcamentoRapido(){
   if(!_rapidoItens.length){ alert('Adicione ao menos um item.'); return; }
@@ -1547,7 +1600,9 @@ function abrirFormCompra(clienteId){
     <button class="modal-x" onclick="abrirCli(${clienteId})">✕</button>
     <h2>Registrar compra</h2>
     <div class="cli-loc" style="margin-bottom:14px">${c.nome}</div>
-    <div class="field"><label>Produto</label><input id="cp_prod" placeholder="ex: Suplemento Proteico"></div>
+    <div class="field autoc-box"><label>Produto</label><input id="cp_prod" placeholder="ex: Suplemento Proteico" autocomplete="off" oninput="buscarProdutoAutocomplete('cp_prod','cp_prod_sug')" onblur="fecharAutocompleteProduto('cp_prod_sug')">
+      <div class="autoc-list" id="cp_prod_sug" style="display:none"></div>
+    </div>
     <div class="row2">
       <div class="field"><label>Quantidade (kg)</label><input type="number" id="cp_qtd" placeholder="0"></div>
       <div class="field"><label>Consumo/dia (g)</label><input type="number" id="cp_consumo" placeholder="opcional"></div>
@@ -1638,7 +1693,9 @@ function renderFormOrcamento(){
     <div class="prod-cat" style="margin-top:14px">Itens</div>
     <div class="result" style="display:block">${itensHtml}</div>
     <div class="row2" style="margin-top:10px">
-      <div class="field"><label>Produto</label><input id="oi_prod" placeholder="ex: Suplemento Proteico"></div>
+      <div class="field autoc-box"><label>Produto</label><input id="oi_prod" placeholder="ex: Suplemento Proteico" autocomplete="off" oninput="buscarProdutoAutocomplete('oi_prod','oi_prod_sug')" onblur="fecharAutocompleteProduto('oi_prod_sug')">
+        <div class="autoc-list" id="oi_prod_sug" style="display:none"></div>
+      </div>
       <div class="field"><label>Qtd</label><input type="number" id="oi_qtd" placeholder="0"></div>
     </div>
     <div class="row2">
