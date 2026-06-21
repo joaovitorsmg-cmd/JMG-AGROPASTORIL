@@ -501,11 +501,6 @@ input,select,textarea{font-family:inherit;font-size:15px}
         <div class="field"><label>Preço unit. (R$)</label><input type="number" id="rp_preco" placeholder="0"></div>
       </div>
       <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde)" onclick="addItemRapido()">➕ Adicionar item</button>
-      <div class="row2" style="margin-top:14px">
-        <div class="field"><label>Juros (%)</label><input type="number" id="rp_juros" placeholder="ex: 2"></div>
-        <div class="field"><label>Taxa é</label><select id="rp_jurosPeriodo"><option value="mes">% ao mês</option><option value="dia">% ao dia</option></select></div>
-      </div>
-      <div class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="rp_prazo" placeholder="ex: 30"></div>
 
       <div class="prod-cat" style="margin-top:14px">Forma de pagamento (proposta)</div>
       <div class="field"><label>Forma de pagamento</label>
@@ -518,13 +513,20 @@ input,select,textarea{font-family:inherit;font-size:15px}
           <option value="vendor">Vendor (180 dias)</option>
         </select>
       </div>
+      <div id="rp_wrapPrazoSimples" class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="rp_prazo" placeholder="ex: 30"></div>
       <div id="rp_wrapCartao" class="row2" style="display:none">
         <div class="field"><label>Nº de parcelas</label><input type="number" id="rp_parcelas" placeholder="2"></div>
         <div class="field"><label>Intervalo entre parcelas (dias)</label><input type="number" id="rp_intervalo" placeholder="30"></div>
       </div>
       <div id="rp_wrapSafra" class="field" style="display:none"><label>Vencimento Safra</label><select id="rp_safraData"></select></div>
       <div id="rp_wrapVendor" class="field" style="display:none"><label>Prazo Vendor (dias)</label><input type="number" id="rp_vendorDias" placeholder="180"></div>
-      <div class="result-note" style="margin-top:2px">Pra "À vista" ou "A prazo" usamos o campo "Prazo para pagamento (dias)" acima. É só uma proposta — ao fechar a venda você confirma os detalhes finais.</div>
+
+      <div class="prod-cat" style="margin-top:14px">Juros por prazo (opcional)</div>
+      <div class="row2">
+        <div class="field"><label>Juros (%)</label><input type="number" id="rp_juros" placeholder="ex: 2"></div>
+        <div class="field"><label>Taxa é</label><select id="rp_jurosPeriodo"><option value="mes">% ao mês</option><option value="dia">% ao dia</option></select></div>
+      </div>
+      <div class="result-note" style="margin-top:2px">📈 O prazo usado pra calcular o juros embutido segue a forma de pagamento escolhida acima (dias do Vendor, vencimento da Safra, parcelas, ou o campo "Prazo para pagamento" quando for "A prazo"). "À vista" não gera juros. É só uma proposta — ao fechar a venda você confirma os detalhes finais.</div>
 
       <div class="prod-cat" style="margin-top:14px">Frete (repassado ao cliente, embutido no preço)</div>
       <div class="row2">
@@ -940,6 +942,7 @@ function initApp(){
       const hojeISO=new Date().toISOString().slice(0,10);
       elSafra.innerHTML=proximasDatasSafra(hojeISO).map(d=>`<option value="${d}">${isoParaBR(d)}</option>`).join('');
     }
+    atualizarVisibilidadeFormaPagamentoRapido();
   }catch(e){ console.warn('safraRapido',e); }
   try{
     navigator.onLine ? setSync(true) : setSync(false);
@@ -1529,6 +1532,7 @@ function atualizarVisibilidadeFormaPagamentoRapido(){
   const formaEl=document.getElementById('rp_forma');
   if(!formaEl) return;
   const forma=formaEl.value;
+  document.getElementById('rp_wrapPrazoSimples').style.display=forma==='prazo'?'block':'none';
   document.getElementById('rp_wrapCartao').style.display=(forma==='cartao'||forma==='parcelado')?'flex':'none';
   document.getElementById('rp_wrapSafra').style.display=forma==='safra'?'block':'none';
   document.getElementById('rp_wrapVendor').style.display=forma==='vendor'?'block':'none';
@@ -1569,14 +1573,14 @@ function visualizarOrcamentoRapido(){
   const itensComFrete = aplicarFreteAosItens(itensBase, frete);
   const totalAVista = itensComFrete.reduce((s,it)=>s+it.qtd*it.valorUnit,0);
   const custoFrete = totalAVista-subtotalBase;
+  const formaPagamento = lerFormaPagamentoRapido();
   const juros = +document.getElementById('rp_juros').value||0;
   const jurosPeriodo = document.getElementById('rp_jurosPeriodo').value;
-  const prazoDias = +document.getElementById('rp_prazo').value||0;
+  const prazoDias = prazoDiasEfetivoPagamento(formaPagamento);
   const jurosObj = juros>0 ? {percentual:juros, periodo:jurosPeriodo} : null;
   const jurosTotalPct = calcularJurosTotalPct(jurosObj, prazoDias);
   const itensComJuros = aplicarJurosAosItens(itensComFrete, jurosObj, prazoDias);
   const totalPrazo = itensComJuros.reduce((s,it)=>s+it.qtd*it.valorUnit,0);
-  const formaPagamento = lerFormaPagamentoRapido();
   const itensHtml = itensComFrete.map(it=>`
     <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade} × ${formatBRL(it.valorUnit)}</span><b>${formatBRL(it.qtd*it.valorUnit)}</b></div>`).join('');
   modal(`
@@ -1595,11 +1599,11 @@ function visualizarOrcamentoRapido(){
 }
 function enviarRapidoParaFormal(){
   if(!_rapidoItens.length) return;
-  const prazoDias = +document.getElementById('rp_prazo').value||0;
+  const formaPagamento = lerFormaPagamentoRapido();
+  const prazoDias = prazoDiasEfetivoPagamento(formaPagamento);
   const juros = +document.getElementById('rp_juros').value||0;
   const jurosPeriodo = document.getElementById('rp_jurosPeriodo').value;
   const frete = lerFreteRapidoForm();
-  const formaPagamento = lerFormaPagamentoRapido();
   const itensCopy = JSON.parse(JSON.stringify(_rapidoItens)).map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:it.preco}));
   fecharModal();
   nav('orcamentos');
@@ -2340,6 +2344,18 @@ function gerarDatasPadrao(forma,hoje,p){
   if(forma==='safra') return [p.safraData||proximasDatasSafra(hoje)[0]];
   if(forma==='vendor') return [addDias(hoje,p.vendorDias!=null?p.vendorDias:180)];
   return [hoje];
+}
+function prazoDiasEfetivoPagamento(pagamento){
+  // Unifica o juros embutido com a forma de pagamento escolhida: em vez de depender de um
+  // campo de "prazo" separado e desconectado, os dias usados pro cálculo de juros vêm das
+  // mesmas datas que a forma de pagamento já gera (vendor, safra, parcelas, ou prazo simples).
+  if(!pagamento) return 0;
+  const hoje=new Date().toISOString().slice(0,10);
+  const datas=gerarDatasPadrao(pagamento.forma,hoje,pagamento);
+  if(!datas.length) return 0;
+  const hojeMs=new Date(hoje+'T00:00:00').getTime();
+  const media=datas.reduce((s,d)=>s+(new Date(d+'T00:00:00').getTime()-hojeMs)/86400000,0)/datas.length;
+  return Math.round(media);
 }
 function gerarParcelasPagamento(o,pagamento){
   const hoje=new Date().toISOString().slice(0,10);
