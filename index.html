@@ -507,6 +507,25 @@ input,select,textarea{font-family:inherit;font-size:15px}
       </div>
       <div class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="rp_prazo" placeholder="ex: 30"></div>
 
+      <div class="prod-cat" style="margin-top:14px">Forma de pagamento (proposta)</div>
+      <div class="field"><label>Forma de pagamento</label>
+        <select id="rp_forma" onchange="atualizarVisibilidadeFormaPagamentoRapido()">
+          <option value="vista">À vista</option>
+          <option value="prazo" selected>A prazo</option>
+          <option value="parcelado">Prazo parcelado (boleto)</option>
+          <option value="cartao">Cartão parcelado</option>
+          <option value="safra">Safra (30/04, 30/05 ou 30/08)</option>
+          <option value="vendor">Vendor (180 dias)</option>
+        </select>
+      </div>
+      <div id="rp_wrapCartao" class="row2" style="display:none">
+        <div class="field"><label>Nº de parcelas</label><input type="number" id="rp_parcelas" placeholder="2"></div>
+        <div class="field"><label>Intervalo entre parcelas (dias)</label><input type="number" id="rp_intervalo" placeholder="30"></div>
+      </div>
+      <div id="rp_wrapSafra" class="field" style="display:none"><label>Vencimento Safra</label><select id="rp_safraData"></select></div>
+      <div id="rp_wrapVendor" class="field" style="display:none"><label>Prazo Vendor (dias)</label><input type="number" id="rp_vendorDias" placeholder="180"></div>
+      <div class="result-note" style="margin-top:2px">Pra "À vista" ou "A prazo" usamos o campo "Prazo para pagamento (dias)" acima. É só uma proposta — ao fechar a venda você confirma os detalhes finais.</div>
+
       <div class="prod-cat" style="margin-top:14px">Frete (seu controle — valor nunca vai pro cliente)</div>
       <div class="row2">
         <div class="field"><label>Tipo</label><select id="rp_freteTipo" onchange="atualizarCamposFreteRapido()">
@@ -915,6 +934,13 @@ function initApp(){
   try{ renderLearn(); }catch(e){ console.warn('learn',e); }
   try{ loadApiKey(); }catch(e){ console.warn('apikey',e); }
   try{ initCloudUI(); }catch(e){ console.warn('cloud',e); }
+  try{
+    const elSafra=document.getElementById('rp_safraData');
+    if(elSafra){
+      const hojeISO=new Date().toISOString().slice(0,10);
+      elSafra.innerHTML=proximasDatasSafra(hojeISO).map(d=>`<option value="${d}">${isoParaBR(d)}</option>`).join('');
+    }
+  }catch(e){ console.warn('safraRapido',e); }
   try{
     navigator.onLine ? setSync(true) : setSync(false);
     window.addEventListener('online',()=>setSync(true));
@@ -1499,6 +1525,31 @@ function atualizarCamposFreteRapido(){
   document.getElementById('rp_wrapFreteKm').style.display=tipoEl.value==='por_km'?'block':'none';
   atualizarPreviaFreteRapido();
 }
+function atualizarVisibilidadeFormaPagamentoRapido(){
+  const formaEl=document.getElementById('rp_forma');
+  if(!formaEl) return;
+  const forma=formaEl.value;
+  document.getElementById('rp_wrapCartao').style.display=(forma==='cartao'||forma==='parcelado')?'flex':'none';
+  document.getElementById('rp_wrapSafra').style.display=forma==='safra'?'block':'none';
+  document.getElementById('rp_wrapVendor').style.display=forma==='vendor'?'block':'none';
+}
+function lerFormaPagamentoRapido(){
+  const formaEl=document.getElementById('rp_forma');
+  if(!formaEl) return null;
+  const forma=formaEl.value;
+  const pagamento={forma};
+  if(forma==='prazo'){
+    pagamento.prazoDias=+document.getElementById('rp_prazo').value||0;
+  } else if(forma==='parcelado'||forma==='cartao'){
+    pagamento.parcelas=+document.getElementById('rp_parcelas').value||2;
+    pagamento.intervaloDias=+document.getElementById('rp_intervalo').value||30;
+  } else if(forma==='safra'){
+    pagamento.safraData=document.getElementById('rp_safraData').value;
+  } else if(forma==='vendor'){
+    pagamento.vendorDias=+document.getElementById('rp_vendorDias').value||180;
+  }
+  return pagamento;
+}
 function atualizarPreviaFreteRapido(){
   const box=document.getElementById('rp_previaFrete');
   if(!box) return;
@@ -1525,6 +1576,7 @@ function visualizarOrcamentoRapido(){
   const jurosTotalPct = calcularJurosTotalPct(jurosObj, prazoDias);
   const itensComJuros = aplicarJurosAosItens(itensComFrete, jurosObj, prazoDias);
   const totalPrazo = itensComJuros.reduce((s,it)=>s+it.qtd*it.valorUnit,0);
+  const formaPagamento = lerFormaPagamentoRapido();
   const itensHtml = itensComFrete.map(it=>`
     <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade} × ${formatBRL(it.valorUnit)}</span><b>${formatBRL(it.qtd*it.valorUnit)}</b></div>`).join('');
   modal(`
@@ -1535,6 +1587,7 @@ function visualizarOrcamentoRapido(){
     ${jurosTotalPct>0?`<div class="result-line" style="font-size:16px;color:var(--cinza)"><span>Total a prazo (${prazoDias} dias, ${juros}% ao ${jurosPeriodo==='mes'?'mês':'dia'} = +${jurosTotalPct.toFixed(2)}%)</span><b>${formatBRL(totalPrazo)}</b></div>`:''}
     ${custoFrete>0?`<div class="result-note" style="margin-top:4px">💰 Frete de <b>${formatBRL(custoFrete)}</b> já embutido no preço dos itens acima.</div>`:''}
     ${frete&&frete.responsavel?`<div class="result-note" style="margin-top:4px">Responsável pela entrega: <b>${FRETE_RESPONSAVEL_LABELS[frete.responsavel]}</b> — esse é o único dado de frete que pode ir pro cliente.</div>`:''}
+    ${formaPagamento?`<div class="result-note" style="margin-top:4px">💳 Forma de pagamento: <b>${FORMA_PAGAMENTO_LABELS[formaPagamento.forma]}</b>${formaPagamentoDetalheHtml(formaPagamento)}</div>`:''}
     <div class="disclaimer" style="margin-top:14px">Valores e prazos sujeitos à confirmação. Sem registro de cliente — use a aba Orçamentos para gerar documento formal e acompanhar.</div>
     <button class="btn-calc" style="margin-top:14px" onclick="enviarRapidoParaFormal()">📋 Transformar em orçamento formal</button>
     <button onclick="_rapidoItens=[];renderRapidoItens();fecharModal();" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verm);border-radius:12px;font-size:15px;font-weight:700">🗑️ Limpar e começar novo</button>
@@ -1546,6 +1599,7 @@ function enviarRapidoParaFormal(){
   const juros = +document.getElementById('rp_juros').value||0;
   const jurosPeriodo = document.getElementById('rp_jurosPeriodo').value;
   const frete = lerFreteRapidoForm();
+  const formaPagamento = lerFormaPagamentoRapido();
   const itensCopy = JSON.parse(JSON.stringify(_rapidoItens)).map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:it.preco}));
   fecharModal();
   nav('orcamentos');
@@ -1554,6 +1608,7 @@ function enviarRapidoParaFormal(){
   if(prazoDias>0) _orcDraft.prazoDiasPadrao = prazoDias;
   if(frete) _orcDraft.frete = frete;
   if(juros>0) _orcDraft.juros = {percentual:juros, periodo:jurosPeriodo};
+  _orcDraft.formaPagamentoPadrao = formaPagamento;
   renderFormOrcamento();
 }
 
@@ -1961,7 +2016,7 @@ function renderOrcamentos(){
 }
 function abrirNovoOrcamento(editId, presetClienteId){
   const o = editId ? DB.orcamentos.find(x=>x.id===editId) : null;
-  _orcDraft = o ? JSON.parse(JSON.stringify(o)) : {id:null, clienteId:presetClienteId||null, itens:[], validadeDias:7, obs:'', frete:null, juros:null, status:'aberto', historico:[]};
+  _orcDraft = o ? JSON.parse(JSON.stringify(o)) : {id:null, clienteId:presetClienteId||null, itens:[], validadeDias:7, obs:'', frete:null, juros:null, formaPagamentoPadrao:null, status:'aberto', historico:[]};
   if(o){
     // o.itens pode já estar com o frete embutido (valorUnit) de um salvamento anterior;
     // ao reabrir pra editar, volta pro valor base (sem frete) pra não embutir de novo em dobro.
@@ -2195,7 +2250,8 @@ function abrirOrcamento(id){
     ${o.obs?`<div class="result-note" style="margin-top:10px">${o.obs}</div>`:''}
     ${o.motivoGanho?`<div class="result-note" style="margin-top:6px;color:var(--verde)">✅ Motivo do fechamento: ${o.motivoGanho}</div>`:''}
     ${o.motivoPerda?`<div class="result-note" style="margin-top:6px;color:var(--verm)">❌ Motivo da perda: ${o.motivoPerda}</div>`:''}
-    ${o.pagamento?`<div class="result-note" style="margin-top:6px">💳 Pagamento: ${FORMA_PAGAMENTO_LABELS[o.pagamento.forma]||o.pagamento.forma}${o.pagamento.forma==='prazo'?` (${o.pagamento.prazoDias} dias)`:''}${(o.pagamento.forma==='cartao'||o.pagamento.forma==='parcelado')?` (${o.pagamento.parcelas}x)`:''}${o.pagamento.forma==='vendor'?` (${o.pagamento.vendorDias||180} dias)`:''}${o.pagamento.forma==='safra'&&o.pagamento.datas&&o.pagamento.datas[0]?` (venc. ${isoParaBR(o.pagamento.datas[0])})`:''}</div>`:''}
+    ${o.pagamento?`<div class="result-note" style="margin-top:6px">💳 Pagamento: ${FORMA_PAGAMENTO_LABELS[o.pagamento.forma]||o.pagamento.forma}${formaPagamentoDetalheHtml(o.pagamento)}</div>`:''}
+    ${!o.pagamento&&o.formaPagamentoPadrao?`<div class="result-note" style="margin-top:6px">💳 Forma de pagamento proposta: ${FORMA_PAGAMENTO_LABELS[o.formaPagamentoPadrao.forma]||o.formaPagamentoPadrao.forma}${formaPagamentoDetalheHtml(o.formaPagamentoPadrao)} — usada como sugestão ao fechar a venda</div>`:''}
     ${o.comissao&&o.comissao.parcelas?`
     <div class="prod-cat" style="margin-top:18px">Previsão de comissão</div>
     <div class="result" style="display:block">${o.comissao.parcelas.map(p=>`<div class="result-line"><span>Parcela ${p.numero} — comissão prevista ${p.dataComissaoPrevista}${p.comissaoRecebida?' ✅':''}</span><b>${formatBRL(p.valorComissao)}</b></div>`).join('')}</div>
@@ -2225,6 +2281,17 @@ function mudarStatusOrc(id,status){
 }
 let _statusFechamentoPendente=null;
 const FORMA_PAGAMENTO_LABELS={vista:'À vista',prazo:'A prazo',parcelado:'Prazo parcelado',cartao:'Cartão parcelado',safra:'Safra',vendor:'Vendor'};
+function formaPagamentoDetalheHtml(p){
+  if(!p) return '';
+  if(p.forma==='prazo') return ` (${p.prazoDias||0} dias)`;
+  if(p.forma==='cartao'||p.forma==='parcelado') return ` (${p.parcelas||2}x)`;
+  if(p.forma==='vendor') return ` (${p.vendorDias||180} dias)`;
+  if(p.forma==='safra'){
+    const d=(p.datas&&p.datas[0])||p.safraData;
+    return d?` (venc. ${isoParaBR(d)})`:'';
+  }
+  return '';
+}
 const FRETE_RESPONSAVEL_LABELS={cliente:'Por conta do cliente',agroquima:'Agroquima Entrega',transportadora:'Transportadora'};
 function addDias(dataISO,dias){
   const d=new Date(dataISO+'T00:00:00');
@@ -2457,7 +2524,7 @@ function confirmarMotivoStatus(id,status){
 function abrirComissaoStatus(id,motivo,modoEdicao){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
   _statusFechamentoPendente={id,motivo,editando:!!modoEdicao};
-  const pagExistente=modoEdicao&&o.pagamento?o.pagamento:null;
+  const pagExistente=(modoEdicao&&o.pagamento)?o.pagamento:(o.formaPagamentoPadrao||null);
   const comissaoExistente=modoEdicao&&o.comissao?o.comissao:null;
   const premExistente=comissaoExistente&&comissaoExistente.premiacao;
   const freteExistente=o.frete||null;
