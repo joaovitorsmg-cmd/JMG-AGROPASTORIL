@@ -15,6 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
 <style>
 :root{
   --verde:#367C2B; --verde-esc:#1E4A18; --verde-cl:#EAF4E7;
@@ -456,12 +457,12 @@ input,select,textarea{font-family:inherit;font-size:15px}
   <!-- LISTA DE PREÇOS -->
   <div class="calc-pane" id="c-precos" style="display:none">
     <div class="calc-box">
-      <h3>📄 Atualizar por arquivo <span class="badge-tec">PDF / Word</span></h3>
+      <h3>📄 Atualizar por arquivo <span class="badge-tec">PDF / Word / Excel</span></h3>
       <p style="font-size:13px;color:var(--cinza);margin-bottom:12px;line-height:1.5">
-        Envie a tabela de preços em PDF ou Word (.docx) — o painel lê o arquivo e tenta reconhecer produto e preço em cada linha automaticamente. Sempre revise o resultado antes de salvar.
+        Envie a tabela de preços em PDF, Word (.docx) ou Excel (.xls, .xlsx, .xlsb) — o painel lê o arquivo e tenta reconhecer produto e preço em cada linha/coluna automaticamente. Sempre revise o resultado antes de salvar.
       </p>
-      <input type="file" id="precoFile" accept=".pdf,.docx" style="display:none" onchange="lerArquivoPrecos(event)">
-      <button class="btn-calc" onclick="document.getElementById('precoFile').click()">📂 Selecionar arquivo (.pdf ou .docx)</button>
+      <input type="file" id="precoFile" accept=".pdf,.docx,.xls,.xlsx,.xlsb" style="display:none" onchange="lerArquivoPrecos(event)">
+      <button class="btn-calc" onclick="document.getElementById('precoFile').click()">📂 Selecionar arquivo (PDF, Word ou Excel)</button>
       <div id="precoLeituraStatus" style="margin-top:10px;font-size:13px;color:var(--cinza)"></div>
       <div id="precoPreviewBox"></div>
     </div>
@@ -505,6 +506,10 @@ input,select,textarea{font-family:inherit;font-size:15px}
   <div class="view-title">Meus Clientes</div>
   <div class="view-desc">Carteira, histórico e prospecção</div>
   <input class="search-bar" id="cliSearch" placeholder="🔍 Buscar cliente..." oninput="renderClientes()">
+  <input type="file" id="cliImportFile" accept=".xls,.xlsx,.xlsb" style="display:none" onchange="importarClientesExcel(event)">
+  <button class="btn-calc" style="margin:10px 0;background:var(--cinza-cl);color:var(--verde)" onclick="document.getElementById('cliImportFile').click()">📂 Importar clientes (Excel)</button>
+  <div id="cliImportStatus" class="result-note"></div>
+  <div id="cliImportPreviewBox"></div>
   <div id="cliList"></div>
 </div>
 <button class="btn-add" id="btnAddCli" onclick="abrirNovoCli()" style="display:none">+</button>
@@ -1061,11 +1066,11 @@ function lerArquivoPrecos(ev){
   const reader = new FileReader();
   reader.onload = async () => {
     try{
-      let texto = '';
-      if(ext === 'pdf') texto = await extrairTextoPDF(reader.result);
-      else if(ext === 'docx') texto = await extrairTextoDocx(reader.result);
-      else throw new Error('Envie um arquivo .pdf ou .docx');
-      const itens = parsearLinhasPreco(texto);
+      let itens = [];
+      if(ext === 'pdf') itens = parsearLinhasPreco(await extrairTextoPDF(reader.result));
+      else if(ext === 'docx') itens = parsearLinhasPreco(await extrairTextoDocx(reader.result));
+      else if(ext === 'xls' || ext === 'xlsx' || ext === 'xlsb') itens = extrairItensExcelPrecos(reader.result);
+      else throw new Error('Envie um arquivo .pdf, .docx, .xls, .xlsx ou .xlsb');
       if(!itens.length){
         status.innerHTML = '⚠️ Não consegui identificar produtos com preço neste arquivo. Tente adicionar manualmente.';
         return;
@@ -1106,6 +1111,47 @@ async function extrairTextoDocx(arrayBuffer){
   if(typeof mammoth === 'undefined') throw new Error('Leitor de Word não carregou — verifique sua conexão e tente de novo.');
   const resultado = await mammoth.extractRawText({arrayBuffer});
   return resultado.value;
+}
+function normalizarHeader(s){
+  return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().trim();
+}
+function parsePrecoCelula(v){
+  if(v===null || v===undefined || v==='') return 0;
+  if(typeof v === 'number') return v;
+  let s = String(v).trim().replace(/^R\$\s*/i,'');
+  if(/,\d{1,2}$/.test(s)) s = s.replace(/\./g,'').replace(',','.');
+  else s = s.replace(/,/g,'');
+  return parseFloat(s) || 0;
+}
+function extrairItensExcelPrecos(arrayBuffer){
+  if(typeof XLSX === 'undefined') throw new Error('Leitor de planilhas não carregou — verifique sua conexão e tente de novo.');
+  const wb = XLSX.read(new Uint8Array(arrayBuffer), {type:'array'});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const linhas = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+  if(!linhas.length) return [];
+  let headerIdx = -1, colProduto = -1, colPreco = -1, colUnidade = -1;
+  for(let r=0; r<Math.min(5, linhas.length); r++){
+    const row = linhas[r].map(normalizarHeader);
+    const pIdx = row.findIndex(h=>/produto|item|descricao|mercadoria/.test(h));
+    const prIdx = row.findIndex(h=>/preco|valor/.test(h));
+    if(pIdx>-1 && prIdx>-1){
+      headerIdx = r; colProduto = pIdx; colPreco = prIdx;
+      colUnidade = row.findIndex(h=>/unidade|^un\.?$/.test(h));
+      break;
+    }
+  }
+  const dados = headerIdx>-1 ? linhas.slice(headerIdx+1) : linhas;
+  const pCol = headerIdx>-1 ? colProduto : 0;
+  const prCol = headerIdx>-1 ? colPreco : 1;
+  const itens = [];
+  dados.forEach(row=>{
+    const produto = String(row[pCol]||'').trim();
+    const preco = parsePrecoCelula(row[prCol]);
+    if(!produto || !preco) return;
+    const unidade = colUnidade>-1 ? (String(row[colUnidade]||'').trim()||'un') : 'un';
+    itens.push({id:Date.now()+itens.length, produto, preco, unidade, atualizadoEm:new Date().toISOString().slice(0,10)});
+  });
+  return itens;
 }
 function parsearLinhasPreco(texto){
   const linhas = texto.split('\n').map(l=>l.trim()).filter(Boolean);
@@ -1372,6 +1418,121 @@ function excluirCli(id){
   saveDB();fecharModal();renderClientes();renderKPIs();renderAlertas();
 }
 
+/* ---- IMPORTAÇÃO DE CLIENTES POR EXCEL (.xls/.xlsx/.xlsb) ---- */
+let _cliPreviewDraft = null;
+function parsearClientesExcel(arrayBuffer){
+  if(typeof XLSX === 'undefined') throw new Error('Leitor de planilhas não carregou — verifique sua conexão e tente de novo.');
+  const wb = XLSX.read(new Uint8Array(arrayBuffer), {type:'array'});
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  const linhas = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
+  if(!linhas.length) return [];
+  const mapaCol = {
+    nome:/nome|cliente|fazenda|razao/, cidade:/cidade|municipio/, uf:/^uf$|estado/,
+    telefone:/telefone|fone|celular|whatsapp/, email:/e-?mail/, cpfCnpj:/cpf|cnpj|documento/,
+    area:/area|hectare/, cabecas:/cabeca|rebanho/, tipo:/^tipo$/,
+    rua:/endereco|logradouro|^rua$/, cep:/^cep$/
+  };
+  let headerIdx = -1, cols = {};
+  for(let r=0; r<Math.min(5, linhas.length); r++){
+    const row = linhas[r].map(normalizarHeader);
+    const idxNome = row.findIndex(h=>mapaCol.nome.test(h));
+    if(idxNome>-1){
+      headerIdx = r;
+      Object.keys(mapaCol).forEach(k=>{ cols[k] = row.findIndex(h=>mapaCol[k].test(h)); });
+      break;
+    }
+  }
+  if(headerIdx===-1) cols = {nome:0, cidade:1, uf:2, telefone:3};
+  const dados = headerIdx>-1 ? linhas.slice(headerIdx+1) : linhas;
+  const val = (row,key) => { const i=cols[key]; return (i!=null && i>-1) ? String(row[i]||'').trim() : ''; };
+  const clientes = [];
+  dados.forEach(row=>{
+    const nome = val(row,'nome'); if(!nome) return;
+    const cidade = val(row,'cidade'), uf = val(row,'uf').toUpperCase();
+    const tipoTxt = normalizarHeader(val(row,'tipo'));
+    let tipo = 'ambos';
+    if(/pec/.test(tipoTxt) && !/agri/.test(tipoTxt)) tipo='pec';
+    else if(/agri/.test(tipoTxt) && !/pec/.test(tipoTxt)) tipo='agri';
+    clientes.push({
+      nome, loc:[cidade,uf].filter(Boolean).join('/'), tipo,
+      area: parsePrecoCelula(val(row,'area')), cabecas: parsePrecoCelula(val(row,'cabecas')),
+      cpfCnpj: val(row,'cpfCnpj'), telefone: val(row,'telefone'), email: val(row,'email'),
+      endereco:{ rua: val(row,'rua'), cidade, uf, cep: val(row,'cep') }
+    });
+  });
+  return clientes;
+}
+function importarClientesExcel(ev){
+  const file = ev.target.files[0]; if(!file) return;
+  const status = document.getElementById('cliImportStatus');
+  status.textContent = '⏳ Lendo planilha...';
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const clientes = parsearClientesExcel(reader.result);
+      if(!clientes.length){
+        status.innerHTML = '⚠️ Não consegui identificar clientes nesta planilha. Verifique se a primeira linha tem cabeçalhos como "Nome", "Cidade", "UF".';
+        return;
+      }
+      status.innerHTML = `✅ ${clientes.length} cliente(s) reconhecido(s). Revise abaixo antes de importar.`;
+      _cliPreviewDraft = clientes;
+      renderPreviewClientes();
+    }catch(e){
+      console.warn('importarClientesExcel', e);
+      status.innerHTML = '❌ Não foi possível ler o arquivo: ' + e.message;
+    }
+    ev.target.value = '';
+  };
+  reader.onerror = () => { status.textContent = '❌ Erro ao ler o arquivo.'; };
+  reader.readAsArrayBuffer(file);
+}
+function renderPreviewClientes(){
+  const box = document.getElementById('cliImportPreviewBox');
+  if(!_cliPreviewDraft || !_cliPreviewDraft.length){ box.innerHTML=''; return; }
+  const nomesExistentes = new Set(DB.clientes.map(c=>c.nome.trim().toLowerCase()));
+  box.innerHTML = `
+    <label style="display:flex;align-items:center;gap:6px;margin:10px 0;font-size:14px;color:var(--verde)">
+      <input type="checkbox" id="cliPularDuplicados" checked> Pular clientes já cadastrados (mesmo nome)
+    </label>
+    <div style="max-height:320px;overflow:auto">
+      ${_cliPreviewDraft.map((c,i)=>`
+        <div class="row2" style="margin-bottom:2px;align-items:center">
+          <input value="${c.nome}" oninput="_cliPreviewDraft[${i}].nome=this.value" style="flex:2">
+          <input value="${c.loc}" oninput="_cliPreviewDraft[${i}].loc=this.value" placeholder="Cidade/UF" style="flex:1">
+          <input value="${c.telefone}" oninput="_cliPreviewDraft[${i}].telefone=this.value" placeholder="Telefone" style="flex:1">
+          <button onclick="removerPreviewCliente(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;padding:0 6px">✕</button>
+        </div>
+        ${nomesExistentes.has(c.nome.trim().toLowerCase())?'<div class="result-note" style="margin:0 0 8px;color:var(--verm)">⚠️ já existe um cliente com esse nome</div>':''}
+      `).join('')}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn-calc" style="flex:1" onclick="salvarPreviewClientes()">✅ Importar ${_cliPreviewDraft.length} cliente(s)</button>
+      <button onclick="cancelarPreviewClientes()" style="flex:1;padding:14px;background:var(--cinza-cl);color:var(--verm);border-radius:12px;font-weight:700">✕ Cancelar</button>
+    </div>`;
+}
+function removerPreviewCliente(i){ _cliPreviewDraft.splice(i,1); renderPreviewClientes(); }
+function salvarPreviewClientes(){
+  if(!_cliPreviewDraft || !_cliPreviewDraft.length) return;
+  const pular = document.getElementById('cliPularDuplicados')?.checked;
+  const nomesExistentes = new Set(DB.clientes.map(c=>c.nome.trim().toLowerCase()));
+  let importados = 0, ignorados = 0;
+  _cliPreviewDraft.forEach(c=>{
+    if(pular && nomesExistentes.has(c.nome.trim().toLowerCase())){ ignorados++; return; }
+    DB.clientes.push({id:Date.now()+importados, ...c, compras:[], produtos:[]});
+    importados++;
+  });
+  saveDB();
+  _cliPreviewDraft = null;
+  document.getElementById('cliImportPreviewBox').innerHTML='';
+  document.getElementById('cliImportStatus').innerHTML = `✅ ${importados} cliente(s) importado(s)${ignorados?' · '+ignorados+' ignorado(s) por duplicidade':''}.`;
+  renderClientes();renderKPIs();renderAlertas();
+}
+function cancelarPreviewClientes(){
+  _cliPreviewDraft = null;
+  document.getElementById('cliImportPreviewBox').innerHTML='';
+  document.getElementById('cliImportStatus').innerHTML='';
+}
+
 /* ---- COMPRAS (alimentam os alertas de recompra) ---- */
 function abrirFormCompra(clienteId){
   const c=DB.clientes.find(x=>x.id===clienteId);
@@ -1537,6 +1698,8 @@ function abrirOrcamento(id){
     <div class="result" style="display:block">${itensHtml}</div>
     <div class="result-line" style="margin-top:10px;font-size:16px"><span>Total</span><b>${formatBRL(o.total||0)}</b></div>
     ${o.obs?`<div class="result-note" style="margin-top:10px">${o.obs}</div>`:''}
+    ${o.motivoGanho?`<div class="result-note" style="margin-top:6px;color:var(--verde)">✅ Motivo do fechamento: ${o.motivoGanho}</div>`:''}
+    ${o.motivoPerda?`<div class="result-note" style="margin-top:6px;color:var(--verm)">❌ Motivo da perda: ${o.motivoPerda}</div>`:''}
 
     <div class="prod-cat" style="margin-top:18px">Acompanhamento</div>
     <div class="result" style="display:block;max-height:160px;overflow:auto">${histHtml}</div>
@@ -1554,13 +1717,63 @@ function abrirOrcamento(id){
     </div>
   `);
 }
+const MOTIVOS_GANHO=['Preço competitivo','Prazo de pagamento','Relacionamento/confiança','Produto disponível na hora','Indicação/recomendação','Outro'];
+const MOTIVOS_PERDA=['Preço da concorrência','Falta de prazo/crédito','Cliente sem orçamento/verba no momento','Comprou de outro fornecedor','Desistiu da compra','Sem retorno do cliente','Outro'];
 function mudarStatusOrc(id,status){
+  if(status==='fechado'||status==='perdido'){ abrirMotivoStatus(id,status); return; }
+  aplicarStatusOrc(id,status);
+}
+function aplicarStatusOrc(id,status,motivo){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
   o.status=status;
   o.historico=o.historico||[];
   const lbl={aberto:'Aberto',negociacao:'Em negociação',fechado:'Fechado (venda concluída)',perdido:'Perdido'}[status]||status;
-  o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Status alterado para: '+lbl});
-  saveDB();renderOrcamentos();renderKPIs();
+  let texto='Status alterado para: '+lbl;
+  if(motivo){
+    texto+=' — motivo: '+motivo;
+    if(status==='fechado'){ o.motivoGanho=motivo; o.motivoPerda=null; }
+    else { o.motivoPerda=motivo; o.motivoGanho=null; }
+  }
+  o.historico.push({data:new Date().toISOString().slice(0,10),texto});
+  if(status==='fechado' && !o.comprasGeradas){
+    criarComprasDoOrcamento(o);
+    o.comprasGeradas=true;
+  }
+  saveDB();renderOrcamentos();renderKPIs();renderAlertas();
+  if(document.getElementById('modal').classList.contains('show')) abrirOrcamento(id);
+}
+function criarComprasDoOrcamento(o){
+  const c=DB.clientes.find(x=>x.id===o.clienteId); if(!c) return;
+  c.compras=c.compras||[]; c.produtos=c.produtos||[];
+  (o.itens||[]).forEach(it=>{
+    c.compras.push({prod:it.produto, qtd:it.qtd, data:new Date().toISOString().slice(0,10), consumoDia:0, valor:it.qtd*it.valorUnit});
+    if(!c.produtos.includes(it.produto)) c.produtos.push(it.produto);
+  });
+  o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Venda registrada na ficha do cliente — entra em "Vendas no mês"'});
+}
+function abrirMotivoStatus(id,status){
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  const lista=status==='fechado'?MOTIVOS_GANHO:MOTIVOS_PERDA;
+  const titulo=status==='fechado'?'🟢 Por que fechou essa venda?':'🔴 Por que perdeu esse orçamento?';
+  modal(`
+    <button class="modal-x" onclick="abrirOrcamento(${id})">✕</button>
+    <h2>${titulo}</h2>
+    <div class="cli-loc" style="margin-bottom:12px">${o.clienteNome}</div>
+    <div class="field"><label>Motivo</label>
+      <select id="motivoSel" onchange="document.getElementById('motivoOutroWrap').style.display=this.value==='Outro'?'block':'none'">
+        ${lista.map(m=>`<option value="${m}">${m}</option>`).join('')}
+      </select>
+    </div>
+    <div class="field" id="motivoOutroWrap" style="display:none"><label>Descreva o motivo</label><input id="motivoOutro" placeholder="ex: cliente achou o frete caro"></div>
+    <button class="btn-calc" onclick="confirmarMotivoStatus(${id},'${status}')">✅ Confirmar</button>
+    <button onclick="aplicarStatusOrc(${id},'${status}')" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verde);border-radius:12px;font-size:15px;font-weight:700">Pular sem informar motivo</button>
+  `);
+}
+function confirmarMotivoStatus(id,status){
+  const sel=document.getElementById('motivoSel').value;
+  const outro=(document.getElementById('motivoOutro')?.value||'').trim();
+  const motivo=(sel==='Outro'&&outro)?outro:sel;
+  aplicarStatusOrc(id,status,motivo);
 }
 function registrarAcompanhamento(id){
   const inp=document.getElementById('orc_nota');
