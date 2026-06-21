@@ -1825,7 +1825,7 @@ function abrirOrcamento(id){
     ${o.obs?`<div class="result-note" style="margin-top:10px">${o.obs}</div>`:''}
     ${o.motivoGanho?`<div class="result-note" style="margin-top:6px;color:var(--verde)">✅ Motivo do fechamento: ${o.motivoGanho}</div>`:''}
     ${o.motivoPerda?`<div class="result-note" style="margin-top:6px;color:var(--verm)">❌ Motivo da perda: ${o.motivoPerda}</div>`:''}
-    ${o.pagamento?`<div class="result-note" style="margin-top:6px">💳 Pagamento: ${({vista:'À vista',prazo:'A prazo',cartao:'Cartão parcelado'})[o.pagamento.forma]||o.pagamento.forma}${o.pagamento.forma==='prazo'?` (${o.pagamento.prazoDias} dias)`:''}${o.pagamento.forma==='cartao'?` (${o.pagamento.parcelas}x)`:''}</div>`:''}
+    ${o.pagamento?`<div class="result-note" style="margin-top:6px">💳 Pagamento: ${FORMA_PAGAMENTO_LABELS[o.pagamento.forma]||o.pagamento.forma}${o.pagamento.forma==='prazo'?` (${o.pagamento.prazoDias} dias)`:''}${(o.pagamento.forma==='cartao'||o.pagamento.forma==='parcelado')?` (${o.pagamento.parcelas}x)`:''}${o.pagamento.forma==='vendor'?` (${o.pagamento.vendorDias||180} dias)`:''}${o.pagamento.forma==='safra'&&o.pagamento.datas&&o.pagamento.datas[0]?` (venc. ${isoParaBR(o.pagamento.datas[0])})`:''}</div>`:''}
     ${o.comissao&&o.comissao.parcelas?`
     <div class="prod-cat" style="margin-top:18px">Previsão de comissão</div>
     <div class="result" style="display:block">${o.comissao.parcelas.map(p=>`<div class="result-line"><span>Parcela ${p.numero} — comissão prevista ${p.dataComissaoPrevista}${p.comissaoRecebida?' ✅':''}</span><b>${formatBRL(p.valorComissao)}</b></div>`).join('')}</div>
@@ -1854,6 +1854,7 @@ function mudarStatusOrc(id,status){
   aplicarStatusOrc(id,status);
 }
 let _statusFechamentoPendente=null;
+const FORMA_PAGAMENTO_LABELS={vista:'À vista',prazo:'A prazo',parcelado:'Prazo parcelado',cartao:'Cartão parcelado',safra:'Safra',vendor:'Vendor'};
 function addDias(dataISO,dias){
   const d=new Date(dataISO+'T00:00:00');
   d.setDate(d.getDate()+(+dias||0));
@@ -1865,17 +1866,36 @@ function proximoDiaPagamento(dataISO,diaPagamento){
   else { d.setMonth(d.getMonth()+1); d.setDate(diaPagamento); }
   return d.toISOString().slice(0,10);
 }
+function isoParaBR(iso){ return (iso||'').split('-').reverse().join('/'); }
+function proximasDatasSafra(hoje){
+  const ano=+hoje.slice(0,4);
+  return ['04-30','05-30','08-30'].map(md=>{
+    const dEsteAno=`${ano}-${md}`;
+    return dEsteAno>=hoje?dEsteAno:`${ano+1}-${md}`;
+  });
+}
+function gerarDatasPadrao(forma,hoje,p){
+  p=p||{};
+  if(forma==='vista') return [hoje];
+  if(forma==='prazo') return [addDias(hoje,p.prazoDias!=null?p.prazoDias:30)];
+  if(forma==='parcelado'||forma==='cartao'){
+    const n=Math.max(1,p.parcelas||2);
+    const intervalo=p.intervaloDias!=null?p.intervaloDias:30;
+    const datas=[];
+    for(let i=1;i<=n;i++) datas.push(addDias(hoje,intervalo*i));
+    return datas;
+  }
+  if(forma==='safra') return [p.safraData||proximasDatasSafra(hoje)[0]];
+  if(forma==='vendor') return [addDias(hoje,p.vendorDias!=null?p.vendorDias:180)];
+  return [hoje];
+}
 function gerarParcelasPagamento(o,pagamento){
   const hoje=new Date().toISOString().slice(0,10);
   const total=o.total||0;
-  if(pagamento.forma==='vista') return [{numero:1,valorParcela:total,dataQuitacaoPrevista:hoje}];
-  if(pagamento.forma==='prazo') return [{numero:1,valorParcela:total,dataQuitacaoPrevista:addDias(hoje,pagamento.prazoDias||0)}];
-  const n=Math.max(1,pagamento.parcelas||1);
-  const intervalo=pagamento.intervaloDias||30;
+  const datas=(pagamento.datas&&pagamento.datas.length)?pagamento.datas:gerarDatasPadrao(pagamento.forma,hoje,pagamento);
+  const n=datas.length||1;
   const valorParcela=total/n;
-  const parcelas=[];
-  for(let i=1;i<=n;i++) parcelas.push({numero:i,valorParcela,dataQuitacaoPrevista:addDias(hoje,intervalo*i)});
-  return parcelas;
+  return datas.map((data,i)=>({numero:i+1,valorParcela,dataQuitacaoPrevista:data}));
 }
 function calcularValorComissaoTotal(o){
   const c=o.comissao; if(!c) return 0;
@@ -2031,6 +2051,9 @@ function abrirComissaoStatus(id,motivo,modoEdicao){
   const premBaseAtual=premExistente&&premExistente.base==='item'?'item':'total';
   const premTipoAtual=premExistente&&premExistente.base!=='item'?premExistente.tipo:'';
   const premValorAtual=premExistente&&premExistente.base!=='item'&&premExistente.valor?premExistente.valor:'';
+  const hojeISO=new Date().toISOString().slice(0,10);
+  const datasIniciais=(pagExistente&&pagExistente.datas&&pagExistente.datas.length)?pagExistente.datas:gerarDatasPadrao(pagExistente?pagExistente.forma:'prazo',hojeISO,pagExistente||{});
+  const datasHtml=datasIniciais.map((d,i)=>`<div class="field"><label>Vencimento parcela ${i+1}</label><input type="date" id="cm_data_${i}" value="${d}" oninput="atualizarPreviaComissao()"></div>`).join('');
   modal(`
     <button class="modal-x" onclick="abrirOrcamento(${id})">✕</button>
     <h2>${modoEdicao?'✏️ Editar comissão':'💰 Pagamento e comissão'}</h2>
@@ -2040,14 +2063,25 @@ function abrirComissaoStatus(id,motivo,modoEdicao){
       <select id="cm_forma" onchange="atualizarCamposComissao()">
         <option value="vista" ${pagExistente&&pagExistente.forma==='vista'?'selected':''}>À vista</option>
         <option value="prazo" ${!pagExistente||pagExistente.forma==='prazo'?'selected':''}>A prazo</option>
+        <option value="parcelado" ${pagExistente&&pagExistente.forma==='parcelado'?'selected':''}>Prazo parcelado (boleto)</option>
         <option value="cartao" ${pagExistente&&pagExistente.forma==='cartao'?'selected':''}>Cartão parcelado</option>
+        <option value="safra" ${pagExistente&&pagExistente.forma==='safra'?'selected':''}>Safra (30/04, 30/05 ou 30/08)</option>
+        <option value="vendor" ${pagExistente&&pagExistente.forma==='vendor'?'selected':''}>Vendor (180 dias)</option>
       </select>
     </div>
-    <div id="cm_wrapPrazo" class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="cm_prazoDias" value="${pagExistente&&pagExistente.prazoDias!=null?pagExistente.prazoDias:(o.prazoDiasPadrao||30)}" oninput="atualizarPreviaComissao()"></div>
+    <div id="cm_wrapPrazo" class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="cm_prazoDias" value="${pagExistente&&pagExistente.prazoDias!=null?pagExistente.prazoDias:(o.prazoDiasPadrao||30)}" onchange="regenerarDatasPagamento()"></div>
     <div id="cm_wrapCartao" class="row2" style="display:none">
-      <div class="field"><label>Nº de parcelas</label><input type="number" id="cm_parcelas" value="${pagExistente&&pagExistente.parcelas!=null?pagExistente.parcelas:2}" oninput="atualizarPreviaComissao()"></div>
-      <div class="field"><label>Intervalo entre parcelas (dias)</label><input type="number" id="cm_intervalo" value="${pagExistente&&pagExistente.intervaloDias!=null?pagExistente.intervaloDias:30}" oninput="atualizarPreviaComissao()"></div>
+      <div class="field"><label>Nº de parcelas</label><input type="number" id="cm_parcelas" value="${pagExistente&&pagExistente.parcelas!=null?pagExistente.parcelas:2}" onchange="regenerarDatasPagamento()"></div>
+      <div class="field"><label>Intervalo entre parcelas (dias)</label><input type="number" id="cm_intervalo" value="${pagExistente&&pagExistente.intervaloDias!=null?pagExistente.intervaloDias:30}" onchange="regenerarDatasPagamento()"></div>
     </div>
+    <div id="cm_wrapSafra" class="field" style="display:none"><label>Vencimento Safra</label>
+      <select id="cm_safraData" onchange="regenerarDatasPagamento()">
+        ${proximasDatasSafra(hojeISO).map(d=>`<option value="${d}" ${pagExistente&&pagExistente.safraData===d?'selected':''}>${isoParaBR(d)}</option>`).join('')}
+      </select>
+    </div>
+    <div id="cm_wrapVendor" class="field" style="display:none"><label>Prazo Vendor (dias)</label><input type="number" id="cm_vendorDias" value="${pagExistente&&pagExistente.vendorDias!=null?pagExistente.vendorDias:180}" onchange="regenerarDatasPagamento()"></div>
+    <div class="result-note" style="margin-top:2px">📅 Data(s) de vencimento — pré-preenchidas conforme a forma escolhida, mas você pode ajustar livremente no calendário:</div>
+    <div id="cm_wrapDatas" class="row2" style="margin-top:6px">${datasHtml}</div>
 
     <div class="prod-cat" style="margin-top:14px">Comissão</div>
     <div class="field"><label>Calcular sobre</label>
@@ -2106,7 +2140,7 @@ function abrirComissaoStatus(id,motivo,modoEdicao){
     <button onclick="pularComissao()" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verde);border-radius:12px;font-size:15px;font-weight:700">⏭️ Fechar sem registrar comissão agora</button>
     `}
   `);
-  atualizarCamposComissao();
+  atualizarVisibilidadeFormaPagamento();
   toggleComissaoBase();
   atualizarCamposPremiacao();
   atualizarCamposFrete();
@@ -2131,11 +2165,31 @@ function atualizarCamposFrete(){
   document.getElementById('cm_wrapFreteKm').style.display=tipo==='por_km'?'block':'none';
   atualizarPreviaComissao();
 }
-function atualizarCamposComissao(){
+function atualizarVisibilidadeFormaPagamento(){
   const forma=document.getElementById('cm_forma').value;
   document.getElementById('cm_wrapPrazo').style.display=forma==='prazo'?'block':'none';
-  document.getElementById('cm_wrapCartao').style.display=forma==='cartao'?'flex':'none';
+  document.getElementById('cm_wrapCartao').style.display=(forma==='cartao'||forma==='parcelado')?'flex':'none';
+  document.getElementById('cm_wrapSafra').style.display=forma==='safra'?'block':'none';
+  document.getElementById('cm_wrapVendor').style.display=forma==='vendor'?'block':'none';
+}
+function regenerarDatasPagamento(){
+  if(!_statusFechamentoPendente) return;
+  const forma=document.getElementById('cm_forma').value;
+  const p={
+    prazoDias:+document.getElementById('cm_prazoDias').value||0,
+    parcelas:+document.getElementById('cm_parcelas').value||1,
+    intervaloDias:+document.getElementById('cm_intervalo').value||30,
+    safraData:document.getElementById('cm_safraData')?document.getElementById('cm_safraData').value:'',
+    vendorDias:+document.getElementById('cm_vendorDias').value||180
+  };
+  const hoje=new Date().toISOString().slice(0,10);
+  const datas=gerarDatasPadrao(forma,hoje,p);
+  document.getElementById('cm_wrapDatas').innerHTML=datas.map((d,i)=>`<div class="field"><label>Vencimento parcela ${i+1}</label><input type="date" id="cm_data_${i}" value="${d}" oninput="atualizarPreviaComissao()"></div>`).join('');
   atualizarPreviaComissao();
+}
+function atualizarCamposComissao(){
+  atualizarVisibilidadeFormaPagamento();
+  regenerarDatasPagamento();
 }
 function toggleComissaoBase(){
   const base=document.getElementById('cm_base').value;
@@ -2148,10 +2202,16 @@ function lerFormComissao(o){
   const pagamento={forma};
   if(forma==='prazo'){
     pagamento.prazoDias=+document.getElementById('cm_prazoDias').value||0;
-  } else if(forma==='cartao'){
+  } else if(forma==='parcelado'||forma==='cartao'){
     pagamento.parcelas=+document.getElementById('cm_parcelas').value||1;
     pagamento.intervaloDias=+document.getElementById('cm_intervalo').value||30;
+  } else if(forma==='safra'){
+    pagamento.safraData=document.getElementById('cm_safraData').value;
+  } else if(forma==='vendor'){
+    pagamento.vendorDias=+document.getElementById('cm_vendorDias').value||180;
   }
+  const datasInputs=Array.from(document.querySelectorAll('#cm_wrapDatas input[type="date"]'));
+  pagamento.datas=datasInputs.map(inp=>inp.value).filter(Boolean);
   const base=document.getElementById('cm_base').value;
   const comissaoConfig={base};
   if(base==='item'){
@@ -2454,8 +2514,8 @@ function gerarPDFConteudo(orcId, tipo, logoImg){
     doc.setFontSize(11); doc.setTextColor(30,74,24);
     doc.text('Condições de pagamento', 14, y); y+=6;
     doc.setFontSize(10); doc.setTextColor(40);
-    const formaLbl={vista:'À vista',prazo:'A prazo',cartao:'Cartão parcelado'}[o.pagamento.forma]||o.pagamento.forma;
-    doc.text(`Forma: ${formaLbl}${o.pagamento.forma==='prazo'?` (${o.pagamento.prazoDias} dias)`:''}${o.pagamento.forma==='cartao'?` (${o.pagamento.parcelas}x de ${o.pagamento.intervaloDias} dias)`:''}`, 14, y); y+=5;
+    const formaLbl=FORMA_PAGAMENTO_LABELS[o.pagamento.forma]||o.pagamento.forma;
+    doc.text(`Forma: ${formaLbl}${o.pagamento.forma==='prazo'?` (${o.pagamento.prazoDias} dias)`:''}${(o.pagamento.forma==='cartao'||o.pagamento.forma==='parcelado')?` (${o.pagamento.parcelas}x de ${o.pagamento.intervaloDias} dias)`:''}${o.pagamento.forma==='vendor'?` (${o.pagamento.vendorDias||180} dias)`:''}${o.pagamento.forma==='safra'&&o.pagamento.datas&&o.pagamento.datas[0]?` (vencimento ${isoParaBR(o.pagamento.datas[0])})`:''}`, 14, y); y+=5;
     if(o.comissao && o.comissao.parcelas){
       o.comissao.parcelas.forEach(p=>{
         doc.text(`Parcela ${p.numero}: ${formatBRL(p.valorParcela)} — quitação prevista ${p.dataQuitacaoPrevista}`, 14, y); y+=5;
