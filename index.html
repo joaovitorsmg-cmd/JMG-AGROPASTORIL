@@ -1183,6 +1183,7 @@ function buscarProdutosBase(q,limite){
   const termos = nq.split(/\s+/).filter(Boolean);
   const out=[];
   for(const p of PRODUTOS_BASE){
+    if(p.s==='MATERIA PRIMA') continue; // matéria-prima é insumo interno de fabricação, nunca um item vendável ao cliente
     const nn = normalizarHeader(p.n);
     const cod = String(p.c);
     if(termos.every(t=>nn.includes(t) || cod.includes(t))) out.push(p);
@@ -1757,7 +1758,7 @@ function renderOrcamentos(){
     return `<div class="cli-card" onclick="abrirOrcamento(${o.id})">
       <div class="cli-top">
         <div><div class="cli-nome">${o.clienteNome||'(sem cliente)'}</div><div class="cli-loc">📅 ${o.criadoEm||''}</div></div>
-        <div class="lc-status ${sc}">${sl}</div>
+        <div style="text-align:right">${validadeBadgeHtml(o)}<div class="lc-status ${sc}">${sl}</div></div>
       </div>
       <div class="cli-stats">
         <div class="cli-stat"><div class="n">${formatBRL(o.total||0)}</div><div class="l">total</div></div>
@@ -1928,6 +1929,7 @@ function abrirOrcamento(id){
     <button class="modal-x" onclick="fecharModal()">✕</button>
     <h2>${o.clienteNome}</h2>
     <div class="cli-loc" style="margin-bottom:10px">Criado em ${o.criadoEm} · válido por ${o.validadeDias||7} dias</div>
+    ${(()=>{ const dias=diasRestantesValidade(o); if((o.status!=='aberto'&&o.status!=='negociacao')||dias===null||dias>2) return ''; const estiloBase='font-style:normal;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-weight:700'; return dias<0 ? `<div class="result-note" style="${estiloBase};background:#ffebee;color:var(--verm)">⏰ Esse orçamento venceu há ${-dias} dia${-dias!==1?'s':''} — confirme se o preço ainda é válido antes de enviar pro cliente.</div>` : `<div class="result-note" style="${estiloBase};background:#fff3e0;color:var(--laranja)">⏰ Vence em ${dias} dia${dias!==1?'s':''} — combine o fechamento ou renove o orçamento.</div>`; })()}
     <select id="orc_status_sel" onchange="mudarStatusOrc(${o.id},this.value)" style="width:100%;padding:10px;border:2px solid var(--borda);border-radius:10px;margin-bottom:14px;font-weight:700">
       <option value="aberto" ${o.status==='aberto'?'selected':''}>🟡 Aberto</option>
       <option value="negociacao" ${o.status==='negociacao'?'selected':''}>🔵 Em negociação</option>
@@ -1984,6 +1986,20 @@ function proximoDiaPagamento(dataISO,diaPagamento){
   return d.toISOString().slice(0,10);
 }
 function isoParaBR(iso){ return (iso||'').split('-').reverse().join('/'); }
+function diasRestantesValidade(o){
+  if(!o.criadoEm) return null;
+  const venc=addDias(o.criadoEm, o.validadeDias||7);
+  const hoje=new Date().toISOString().slice(0,10);
+  return Math.round((new Date(venc+'T00:00:00')-new Date(hoje+'T00:00:00'))/86400000);
+}
+function validadeBadgeHtml(o){
+  if(o.status!=='aberto' && o.status!=='negociacao') return '';
+  const dias=diasRestantesValidade(o);
+  if(dias===null) return '';
+  if(dias<0) return `<div class="lc-status" style="background:#ffebee;color:var(--verm);margin-bottom:4px">⏰ Vencido há ${-dias}d</div>`;
+  if(dias<=2) return `<div class="lc-status" style="background:#fff3e0;color:var(--laranja);margin-bottom:4px">⏰ Vence em ${dias}d</div>`;
+  return '';
+}
 function proximasDatasSafra(hoje){
   const ano=+hoje.slice(0,4);
   return ['04-30','05-30','08-30'].map(md=>{
@@ -3096,7 +3112,6 @@ function finishQuiz(){
 let _apiKey = '';
 
 function loadApiKey(){
-  // sessionStorage: dura a sessão. Em produção usar localStorage.
   _apiKey = localStorage.getItem('jmg_api_key') || '';
   atualizarStatusKey();
 }

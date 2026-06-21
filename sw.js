@@ -2,12 +2,13 @@
    SERVICE WORKER — Painel Representante Agroquima
    Permite funcionamento OFFLINE após primeiro acesso
    ===================================================== */
-const CACHE = 'jmg-painel-v5';
+const CACHE = 'jmg-painel-v6';
 const ARQUIVOS = [
   './',
   './index.html',
   './produtos-base.js',
-  './logo-jmg-pedido.png'
+  './logo-jmg-pedido.png',
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
 ];
 
 self.addEventListener('install', e => {
