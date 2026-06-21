@@ -493,9 +493,10 @@ input,select,textarea{font-family:inherit;font-size:15px}
       </div>
       <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde)" onclick="addItemRapido()">➕ Adicionar item</button>
       <div class="row2" style="margin-top:14px">
-        <div class="field"><label>Juros a prazo (% sobre o total)</label><input type="number" id="rp_juros" placeholder="ex: 5"></div>
-        <div class="field"><label>Prazo</label><input id="rp_prazo" placeholder="ex: 30/60/90 dias ou 3x"></div>
+        <div class="field"><label>Juros (%)</label><input type="number" id="rp_juros" placeholder="ex: 2"></div>
+        <div class="field"><label>Taxa é</label><select id="rp_jurosPeriodo"><option value="mes">% ao mês</option><option value="dia">% ao dia</option></select></div>
       </div>
+      <div class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="rp_prazo" placeholder="ex: 30"></div>
       <button class="btn-calc" onclick="visualizarOrcamentoRapido()">👁️ Visualizar orçamento rápido</button>
     </div>
   </div>
@@ -524,8 +525,10 @@ input,select,textarea{font-family:inherit;font-size:15px}
     <div class="subtab" data-os="negociacao" onclick="filterOrc('negociacao')">🔵 Negociação</div>
     <div class="subtab" data-os="fechado" onclick="filterOrc('fechado')">🟢 Fechado</div>
     <div class="subtab" data-os="perdido" onclick="filterOrc('perdido')">🔴 Perdido</div>
+    <div class="subtab" data-os="comissoes" onclick="filterOrc('comissoes')">💰 Comissões</div>
   </div>
   <div id="orcList"></div>
+  <div id="comissoesBox" style="display:none"></div>
 </div>
 <button class="btn-add" id="btnAddOrc" onclick="abrirNovoOrcamento()" style="display:none">+</button>
 
@@ -1276,8 +1279,10 @@ function visualizarOrcamentoRapido(){
   if(!_rapidoItens.length){ alert('Adicione ao menos um item.'); return; }
   const subtotal = _rapidoItens.reduce((s,it)=>s+it.qtd*it.preco,0);
   const juros = +document.getElementById('rp_juros').value||0;
-  const prazo = document.getElementById('rp_prazo').value.trim();
-  const totalPrazo = subtotal*(1+juros/100);
+  const jurosPeriodo = document.getElementById('rp_jurosPeriodo').value;
+  const prazoDias = +document.getElementById('rp_prazo').value||0;
+  const jurosTotalPct = jurosPeriodo==='mes' ? juros*(prazoDias/30) : juros*prazoDias;
+  const totalPrazo = subtotal*(1+jurosTotalPct/100);
   const itensHtml = _rapidoItens.map(it=>`
     <div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade} × ${formatBRL(it.preco)}</span><b>${formatBRL(it.qtd*it.preco)}</b></div>`).join('');
   modal(`
@@ -1285,7 +1290,7 @@ function visualizarOrcamentoRapido(){
     <h2>⚡ Orçamento rápido</h2>
     <div class="result" style="display:block">${itensHtml}</div>
     <div class="result-line" style="margin-top:10px;font-size:18px"><span>Total à vista</span><b>${formatBRL(subtotal)}</b></div>
-    ${juros>0?`<div class="result-line" style="font-size:16px;color:var(--cinza)"><span>Total a prazo${prazo?(' ('+prazo+')'):''} +${juros}%</span><b>${formatBRL(totalPrazo)}</b></div>`:''}
+    ${juros>0&&prazoDias>0?`<div class="result-line" style="font-size:16px;color:var(--cinza)"><span>Total a prazo (${prazoDias} dias, ${juros}% ao ${jurosPeriodo==='mes'?'mês':'dia'} = +${jurosTotalPct.toFixed(2)}%)</span><b>${formatBRL(totalPrazo)}</b></div>`:''}
     <div class="disclaimer" style="margin-top:14px">Valores e prazos sujeitos à confirmação. Sem registro de cliente — use a aba Orçamentos para gerar documento formal e acompanhar.</div>
     <button class="btn-calc" style="margin-top:14px" onclick="enviarRapidoParaFormal()">📋 Transformar em orçamento formal</button>
     <button onclick="_rapidoItens=[];renderRapidoItens();fecharModal();" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verm);border-radius:12px;font-size:15px;font-weight:700">🗑️ Limpar e começar novo</button>
@@ -1293,11 +1298,13 @@ function visualizarOrcamentoRapido(){
 }
 function enviarRapidoParaFormal(){
   if(!_rapidoItens.length) return;
+  const prazoDias = +document.getElementById('rp_prazo').value||0;
   const itensCopy = JSON.parse(JSON.stringify(_rapidoItens)).map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:it.preco}));
   fecharModal();
   nav('orcamentos');
   abrirNovoOrcamento(null, null);
   _orcDraft.itens = itensCopy;
+  if(prazoDias>0) _orcDraft.prazoDiasPadrao = prazoDias;
   renderFormOrcamento();
 }
 
@@ -1579,7 +1586,15 @@ let _orcDraft=null;
 function filterOrc(f){
   _orcFiltro=f;
   document.querySelectorAll('#orcTabs .subtab').forEach(t=>t.classList.toggle('active',t.dataset.os===f));
-  renderOrcamentos();
+  if(f==='comissoes'){
+    document.getElementById('orcList').style.display='none';
+    document.getElementById('comissoesBox').style.display='block';
+    renderComissoes();
+  } else {
+    document.getElementById('orcList').style.display='block';
+    document.getElementById('comissoesBox').style.display='none';
+    renderOrcamentos();
+  }
 }
 function renderOrcamentos(){
   const box=document.getElementById('orcList');
@@ -1700,6 +1715,10 @@ function abrirOrcamento(id){
     ${o.obs?`<div class="result-note" style="margin-top:10px">${o.obs}</div>`:''}
     ${o.motivoGanho?`<div class="result-note" style="margin-top:6px;color:var(--verde)">✅ Motivo do fechamento: ${o.motivoGanho}</div>`:''}
     ${o.motivoPerda?`<div class="result-note" style="margin-top:6px;color:var(--verm)">❌ Motivo da perda: ${o.motivoPerda}</div>`:''}
+    ${o.pagamento?`<div class="result-note" style="margin-top:6px">💳 Pagamento: ${({vista:'À vista',prazo:'A prazo',cartao:'Cartão parcelado'})[o.pagamento.forma]||o.pagamento.forma}${o.pagamento.forma==='prazo'?` (${o.pagamento.prazoDias} dias)`:''}${o.pagamento.forma==='cartao'?` (${o.pagamento.parcelas}x)`:''}</div>`:''}
+    ${o.comissao&&o.comissao.parcelas?`
+    <div class="prod-cat" style="margin-top:18px">Previsão de comissão</div>
+    <div class="result" style="display:block">${o.comissao.parcelas.map(p=>`<div class="result-line"><span>Parcela ${p.numero} — comissão prevista ${p.dataComissaoPrevista}${p.comissaoRecebida?' ✅':''}</span><b>${formatBRL(p.valorComissao)}</b></div>`).join('')}</div>`:''}
 
     <div class="prod-cat" style="margin-top:18px">Acompanhamento</div>
     <div class="result" style="display:block;max-height:160px;overflow:auto">${histHtml}</div>
@@ -1723,7 +1742,65 @@ function mudarStatusOrc(id,status){
   if(status==='fechado'||status==='perdido'){ abrirMotivoStatus(id,status); return; }
   aplicarStatusOrc(id,status);
 }
-function aplicarStatusOrc(id,status,motivo){
+let _statusFechamentoPendente=null;
+function addDias(dataISO,dias){
+  const d=new Date(dataISO+'T00:00:00');
+  d.setDate(d.getDate()+(+dias||0));
+  return d.toISOString().slice(0,10);
+}
+function proximoDiaPagamento(dataISO,diaPagamento){
+  const d=new Date(dataISO+'T00:00:00');
+  if(d.getDate()<=diaPagamento){ d.setDate(diaPagamento); }
+  else { d.setMonth(d.getMonth()+1); d.setDate(diaPagamento); }
+  return d.toISOString().slice(0,10);
+}
+function gerarParcelasPagamento(o,pagamento){
+  const hoje=new Date().toISOString().slice(0,10);
+  const total=o.total||0;
+  if(pagamento.forma==='vista') return [{numero:1,valorParcela:total,dataQuitacaoPrevista:hoje}];
+  if(pagamento.forma==='prazo') return [{numero:1,valorParcela:total,dataQuitacaoPrevista:addDias(hoje,pagamento.prazoDias||0)}];
+  const n=Math.max(1,pagamento.parcelas||1);
+  const intervalo=pagamento.intervaloDias||30;
+  const valorParcela=total/n;
+  const parcelas=[];
+  for(let i=1;i<=n;i++) parcelas.push({numero:i,valorParcela,dataQuitacaoPrevista:addDias(hoje,intervalo*i)});
+  return parcelas;
+}
+function calcularValorComissaoTotal(o){
+  const c=o.comissao; if(!c) return 0;
+  if(c.base==='item'){
+    return (c.itens||[]).reduce((s,ci)=>{
+      const item=(o.itens||[]).find(x=>x.produto===ci.produto);
+      const valorItem=item?item.qtd*item.valorUnit:0;
+      return s+(ci.tipo==='percentual'?valorItem*(ci.valor/100):(+ci.valor||0));
+    },0);
+  }
+  return c.tipo==='percentual' ? (o.total||0)*(c.valor/100) : (+c.valor||0);
+}
+function calcularValorPremiacaoTotal(o){
+  const p=o.comissao&&o.comissao.premiacao; if(!p) return 0;
+  return p.tipo==='percentual' ? (o.total||0)*(p.valor/100) : (+p.valor||0);
+}
+function gerarParcelasComissao(o,parcelasVenda){
+  const totalComissao=calcularValorComissaoTotal(o);
+  const totalPremiacao=calcularValorPremiacaoTotal(o);
+  const totalVenda=o.total||1;
+  return parcelasVenda.map(p=>{
+    const fracao=totalVenda?p.valorParcela/totalVenda:0;
+    return {
+      numero:p.numero,
+      valorParcela:p.valorParcela,
+      dataQuitacaoPrevista:p.dataQuitacaoPrevista,
+      valorComissao:totalComissao*fracao,
+      dataComissaoPrevista:proximoDiaPagamento(p.dataQuitacaoPrevista,15),
+      comissaoRecebida:false,
+      valorPremiacao:totalPremiacao*fracao,
+      dataPremiacaoPrevista:totalPremiacao?proximoDiaPagamento(p.dataQuitacaoPrevista,25):null,
+      premiacaoRecebida:false
+    };
+  });
+}
+function aplicarStatusOrc(id,status,motivo,pagamento,comissaoConfig){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
   o.status=status;
   o.historico=o.historico||[];
@@ -1739,7 +1816,14 @@ function aplicarStatusOrc(id,status,motivo){
     criarComprasDoOrcamento(o);
     o.comprasGeradas=true;
   }
-  saveDB();renderOrcamentos();renderKPIs();renderAlertas();
+  if(status==='fechado' && pagamento && comissaoConfig){
+    o.pagamento=pagamento;
+    o.comissao=comissaoConfig;
+    const parcelasVenda=gerarParcelasPagamento(o,pagamento);
+    o.comissao.parcelas=gerarParcelasComissao(o,parcelasVenda);
+    o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Comissão registrada — previsão de recebimento calculada'});
+  }
+  saveDB();renderOrcamentos();renderComissoes();renderKPIs();renderAlertas();
   if(document.getElementById('modal').classList.contains('show')) abrirOrcamento(id);
 }
 function criarComprasDoOrcamento(o){
@@ -1755,6 +1839,7 @@ function abrirMotivoStatus(id,status){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
   const lista=status==='fechado'?MOTIVOS_GANHO:MOTIVOS_PERDA;
   const titulo=status==='fechado'?'🟢 Por que fechou essa venda?':'🔴 Por que perdeu esse orçamento?';
+  const pularOnclick=status==='fechado'?`abrirComissaoStatus(${id},'')`:`aplicarStatusOrc(${id},'${status}')`;
   modal(`
     <button class="modal-x" onclick="abrirOrcamento(${id})">✕</button>
     <h2>${titulo}</h2>
@@ -1766,14 +1851,134 @@ function abrirMotivoStatus(id,status){
     </div>
     <div class="field" id="motivoOutroWrap" style="display:none"><label>Descreva o motivo</label><input id="motivoOutro" placeholder="ex: cliente achou o frete caro"></div>
     <button class="btn-calc" onclick="confirmarMotivoStatus(${id},'${status}')">✅ Confirmar</button>
-    <button onclick="aplicarStatusOrc(${id},'${status}')" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verde);border-radius:12px;font-size:15px;font-weight:700">Pular sem informar motivo</button>
+    <button onclick="${pularOnclick}" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verde);border-radius:12px;font-size:15px;font-weight:700">Pular sem informar motivo</button>
   `);
 }
 function confirmarMotivoStatus(id,status){
   const sel=document.getElementById('motivoSel').value;
   const outro=(document.getElementById('motivoOutro')?.value||'').trim();
   const motivo=(sel==='Outro'&&outro)?outro:sel;
+  if(status==='fechado'){ abrirComissaoStatus(id,motivo); return; }
   aplicarStatusOrc(id,status,motivo);
+}
+function abrirComissaoStatus(id,motivo){
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  _statusFechamentoPendente={id,motivo};
+  const itensHtml=(o.itens||[]).map((it,i)=>`
+    <div class="row2" style="align-items:end">
+      <div class="field" style="flex:2"><label>${it.produto}</label><select id="cm_it_tipo_${i}" onchange="atualizarPreviaComissao()"><option value="percentual">%</option><option value="valor">R$ fixo</option></select></div>
+      <div class="field"><label>Valor</label><input type="number" id="cm_it_valor_${i}" placeholder="0" oninput="atualizarPreviaComissao()"></div>
+    </div>`).join('');
+  modal(`
+    <button class="modal-x" onclick="abrirOrcamento(${id})">✕</button>
+    <h2>💰 Pagamento e comissão</h2>
+    <div class="cli-loc" style="margin-bottom:12px">${o.clienteNome} · Total ${formatBRL(o.total||0)}</div>
+    <div class="field"><label>Forma de pagamento</label>
+      <select id="cm_forma" onchange="atualizarCamposComissao()">
+        <option value="vista">À vista</option>
+        <option value="prazo" selected>A prazo</option>
+        <option value="cartao">Cartão parcelado</option>
+      </select>
+    </div>
+    <div id="cm_wrapPrazo" class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="cm_prazoDias" value="${o.prazoDiasPadrao||30}" oninput="atualizarPreviaComissao()"></div>
+    <div id="cm_wrapCartao" class="row2" style="display:none">
+      <div class="field"><label>Nº de parcelas</label><input type="number" id="cm_parcelas" value="2" oninput="atualizarPreviaComissao()"></div>
+      <div class="field"><label>Intervalo entre parcelas (dias)</label><input type="number" id="cm_intervalo" value="30" oninput="atualizarPreviaComissao()"></div>
+    </div>
+
+    <div class="prod-cat" style="margin-top:14px">Comissão</div>
+    <div class="field"><label>Calcular sobre</label>
+      <select id="cm_base" onchange="toggleComissaoBase()">
+        <option value="total">Pedido completo</option>
+        <option value="item">Por produto</option>
+      </select>
+    </div>
+    <div id="cm_wrapTotal" class="row2">
+      <div class="field"><label>Tipo</label><select id="cm_tipo" onchange="atualizarPreviaComissao()"><option value="percentual">% sobre o total</option><option value="valor">Valor fixo (R$)</option></select></div>
+      <div class="field"><label>Valor</label><input type="number" id="cm_valor" placeholder="ex: 3" oninput="atualizarPreviaComissao()"></div>
+    </div>
+    <div id="cm_wrapItens" style="display:none">${itensHtml}</div>
+
+    <div class="prod-cat" style="margin-top:14px">Premiação (opcional)</div>
+    <div class="row2">
+      <div class="field"><label>Tipo</label><select id="cm_premTipo" onchange="atualizarPreviaComissao()"><option value="">Sem premiação</option><option value="percentual">% sobre o total</option><option value="valor">Valor fixo (R$)</option></select></div>
+      <div class="field"><label>Valor</label><input type="number" id="cm_premValor" placeholder="0" oninput="atualizarPreviaComissao()"></div>
+    </div>
+
+    <div class="prod-cat" style="margin-top:14px">Previsão de recebimento</div>
+    <div id="cm_previewPrevisao" class="result" style="display:block"></div>
+
+    <button class="btn-calc" style="margin-top:14px" onclick="confirmarComissaoStatus()">✅ Confirmar e fechar venda</button>
+    <button onclick="pularComissao()" style="width:100%;margin-top:8px;padding:14px;background:var(--cinza-cl);color:var(--verde);border-radius:12px;font-size:15px;font-weight:700">⏭️ Fechar sem registrar comissão agora</button>
+  `);
+  atualizarCamposComissao();
+}
+function atualizarCamposComissao(){
+  const forma=document.getElementById('cm_forma').value;
+  document.getElementById('cm_wrapPrazo').style.display=forma==='prazo'?'block':'none';
+  document.getElementById('cm_wrapCartao').style.display=forma==='cartao'?'flex':'none';
+  atualizarPreviaComissao();
+}
+function toggleComissaoBase(){
+  const base=document.getElementById('cm_base').value;
+  document.getElementById('cm_wrapTotal').style.display=base==='total'?'flex':'none';
+  document.getElementById('cm_wrapItens').style.display=base==='item'?'block':'none';
+  atualizarPreviaComissao();
+}
+function lerFormComissao(o){
+  const forma=document.getElementById('cm_forma').value;
+  const pagamento={forma};
+  if(forma==='prazo'){
+    pagamento.prazoDias=+document.getElementById('cm_prazoDias').value||0;
+  } else if(forma==='cartao'){
+    pagamento.parcelas=+document.getElementById('cm_parcelas').value||1;
+    pagamento.intervaloDias=+document.getElementById('cm_intervalo').value||30;
+  }
+  const base=document.getElementById('cm_base').value;
+  const comissaoConfig={base};
+  if(base==='item'){
+    comissaoConfig.itens=(o.itens||[]).map((it,i)=>({
+      produto:it.produto,
+      tipo:document.getElementById('cm_it_tipo_'+i).value,
+      valor:+document.getElementById('cm_it_valor_'+i).value||0
+    }));
+  } else {
+    comissaoConfig.tipo=document.getElementById('cm_tipo').value;
+    comissaoConfig.valor=+document.getElementById('cm_valor').value||0;
+  }
+  const premTipo=document.getElementById('cm_premTipo').value;
+  if(premTipo){
+    comissaoConfig.premiacao={tipo:premTipo,valor:+document.getElementById('cm_premValor').value||0};
+  }
+  return {pagamento,comissaoConfig};
+}
+function atualizarPreviaComissao(){
+  if(!_statusFechamentoPendente) return;
+  const o=DB.orcamentos.find(x=>x.id===_statusFechamentoPendente.id); if(!o) return;
+  const box=document.getElementById('cm_previewPrevisao'); if(!box) return;
+  const {pagamento,comissaoConfig}=lerFormComissao(o);
+  const oTemp=Object.assign({},o,{comissao:comissaoConfig});
+  const parcelasVenda=gerarParcelasPagamento(oTemp,pagamento);
+  const parcelasComissao=gerarParcelasComissao(oTemp,parcelasVenda);
+  box.innerHTML=parcelasComissao.map(p=>`
+    <div class="result-line"><span>Parcela ${p.numero} — quitação prevista ${p.dataQuitacaoPrevista}</span><b>${formatBRL(p.valorParcela)}</b></div>
+    <div class="result-line" style="color:var(--verde)"><span>↳ Comissão prevista (dia 15) ${p.dataComissaoPrevista}</span><b>${formatBRL(p.valorComissao)}</b></div>
+    ${p.valorPremiacao>0?`<div class="result-line" style="color:var(--cinza)"><span>↳ Premiação prevista (dia 25) ${p.dataPremiacaoPrevista}</span><b>${formatBRL(p.valorPremiacao)}</b></div>`:''}
+  `).join('');
+}
+function confirmarComissaoStatus(){
+  if(!_statusFechamentoPendente) return;
+  const {id,motivo}=_statusFechamentoPendente;
+  const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
+  const {pagamento,comissaoConfig}=lerFormComissao(o);
+  _statusFechamentoPendente=null;
+  aplicarStatusOrc(id,'fechado',motivo,pagamento,comissaoConfig);
+}
+function pularComissao(){
+  if(!_statusFechamentoPendente) return;
+  const {id,motivo}=_statusFechamentoPendente;
+  _statusFechamentoPendente=null;
+  aplicarStatusOrc(id,'fechado',motivo);
 }
 function registrarAcompanhamento(id){
   const inp=document.getElementById('orc_nota');
@@ -1787,7 +1992,57 @@ function registrarAcompanhamento(id){
 function excluirOrcamento(id){
   if(!confirm('Excluir este orçamento? Essa ação não pode ser desfeita.'))return;
   DB.orcamentos=DB.orcamentos.filter(x=>x.id!==id);
-  saveDB();fecharModal();renderOrcamentos();renderKPIs();
+  saveDB();fecharModal();renderOrcamentos();renderComissoes();renderKPIs();
+}
+function renderComissoes(){
+  const box=document.getElementById('comissoesBox');
+  if(!box) return;
+  const linhas=[];
+  DB.orcamentos.forEach(o=>{
+    if(o.status==='fechado' && o.comissao && o.comissao.parcelas){
+      o.comissao.parcelas.forEach(p=>linhas.push({orc:o,p}));
+    }
+  });
+  if(!linhas.length){
+    box.innerHTML='<div class="empty"><div class="empty-ico">💰</div>Nenhuma comissão registrada ainda. Feche um orçamento informando a comissão para acompanhar aqui.</div>';
+    return;
+  }
+  linhas.sort((a,b)=>(a.p.dataComissaoPrevista||'').localeCompare(b.p.dataComissaoPrevista||''));
+  const aReceber=linhas.filter(l=>!l.p.comissaoRecebida).reduce((s,l)=>s+l.p.valorComissao,0);
+  const recebido=linhas.filter(l=>l.p.comissaoRecebida).reduce((s,l)=>s+l.p.valorComissao,0);
+  const cards=linhas.map(({orc,p})=>`
+    <div class="cli-card">
+      <div class="cli-top">
+        <div><div class="cli-nome">${orc.clienteNome}</div><div class="cli-loc">Parcela ${p.numero} · quitação prevista ${p.dataQuitacaoPrevista}</div></div>
+        <div class="lc-status ${p.comissaoRecebida?'st-dominado':'st-novo'}">${p.comissaoRecebida?'🟢 Recebida':'🟡 Prevista'}</div>
+      </div>
+      <div class="cli-stats">
+        <div class="cli-stat"><div class="n">${formatBRL(p.valorComissao)}</div><div class="l">comissão</div></div>
+        <div class="cli-stat"><div class="n">${p.dataComissaoPrevista}</div><div class="l">previsão (dia 15)</div></div>
+      </div>
+      <button class="btn-calc" style="margin-top:8px;background:${p.comissaoRecebida?'var(--cinza-cl)':'var(--verde)'};color:${p.comissaoRecebida?'var(--verde)':'#fff'}" onclick="toggleComissaoRecebida(${orc.id},${p.numero})">${p.comissaoRecebida?'↩️ Marcar como não recebida':'✅ Marcar comissão como recebida'}</button>
+      ${p.valorPremiacao>0?`
+      <div class="result-line" style="margin-top:8px"><span>🏆 Premiação prevista ${p.dataPremiacaoPrevista}</span><b>${formatBRL(p.valorPremiacao)}</b></div>
+      <button class="btn-calc" style="margin-top:6px;background:var(--cinza-cl);color:var(--verde)" onclick="togglePremiacaoRecebida(${orc.id},${p.numero})">${p.premiacaoRecebida?'↩️ Premiação não recebida':'✅ Marcar premiação como recebida'}</button>`:''}
+    </div>`).join('');
+  box.innerHTML=`
+    <div class="cli-stats" style="margin-bottom:10px">
+      <div class="cli-stat"><div class="n">${formatBRL(aReceber)}</div><div class="l">a receber</div></div>
+      <div class="cli-stat"><div class="n">${formatBRL(recebido)}</div><div class="l">recebido</div></div>
+    </div>
+    ${cards}`;
+}
+function toggleComissaoRecebida(orcId,numero){
+  const o=DB.orcamentos.find(x=>x.id===orcId); if(!o||!o.comissao) return;
+  const p=(o.comissao.parcelas||[]).find(x=>x.numero===numero); if(!p) return;
+  p.comissaoRecebida=!p.comissaoRecebida;
+  saveDB();renderComissoes();
+}
+function togglePremiacaoRecebida(orcId,numero){
+  const o=DB.orcamentos.find(x=>x.id===orcId); if(!o||!o.comissao) return;
+  const p=(o.comissao.parcelas||[]).find(x=>x.numero===numero); if(!p) return;
+  p.premiacaoRecebida=!p.premiacaoRecebida;
+  saveDB();renderComissoes();
 }
 function telWhats(fone){
   let d=(fone||'').replace(/\D/g,'');
