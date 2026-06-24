@@ -327,6 +327,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
     <div class="tool" onclick="goCalc('solo')"><div class="tool-ico">🧪</div><div class="tool-name">Análise de Solo</div><div class="tool-desc">Calagem e gesso</div></div>
     <div class="tool" onclick="goCalc('pasto')"><div class="tool-ico">🐂</div><div class="tool-name">Pastagem</div><div class="tool-desc">Forrageiras</div></div>
     <div class="tool" onclick="goCalc('nutricao')"><div class="tool-ico">🧂</div><div class="tool-name">Nutrição</div><div class="tool-desc">Sal e duração</div></div>
+    <div class="tool" onclick="nav('cotacoes')"><div class="tool-ico">📊</div><div class="tool-name">Cotações</div><div class="tool-desc">Soja, milho, boi, vaca</div></div>
   </div>
 </div>
 
@@ -976,6 +977,25 @@ input,select,textarea{font-family:inherit;font-size:15px}
   </div>
 </div>
 
+<!-- COTAÇÕES DE MERCADO -->
+<div class="view" id="v-cotacoes">
+  <div class="view-title">📊 Cotações do mercado</div>
+  <div class="view-desc">Soja, milho, boi gordo e vaca gorda — acesso direto à fonte oficial</div>
+
+  <div class="field">
+    <input id="cot_busca" placeholder="Buscar commodity..." oninput="renderCotacoes()">
+  </div>
+  <div class="subtabs" id="cotFiltros">
+    <div class="subtab active" data-f="todos" onclick="filtrarCotacoes('todos')">Todos</div>
+    <div class="subtab" data-f="grao" onclick="filtrarCotacoes('grao')">🌱 Grãos</div>
+    <div class="subtab" data-f="pecuaria" onclick="filtrarCotacoes('pecuaria')">🐂 Pecuária</div>
+  </div>
+
+  <div id="cotacoesList"></div>
+
+  <div class="disclaimer">Os botões abrem a página oficial da fonte (CEPEA/ESALQ ou Scot Consultoria) com o preço do dia, sempre atualizado. O painel não copia, armazena nem redistribui esses valores — só organiza o acesso até a fonte.</div>
+</div>
+
 <div id="modal" class="modal">
   <div id="modalCard" class="modal-card"></div>
 </div>
@@ -1070,6 +1090,52 @@ function scrollToAlertas(){
   if(el) el.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+/* ---- COTAÇÕES DE MERCADO ----
+   Não há scraping/API de tempo real: CEPEA fica atrás de proteção anti-bot
+   (Cloudflare) que só um navegador real consegue passar, e a Scot Consultoria
+   proíbe redistribuir os dados sem autorização. Por isso a aba só organiza o
+   acesso até a página oficial de cada fonte — sempre o preço do dia, sem cópia. */
+const COTACOES_FONTES = [
+  {nome:'Soja', tipo:'grao', icone:'🌱', fontes:[
+    {label:'CEPEA/ESALQ — indicador oficial', url:'https://www.cepea.org.br/br/indicador/soja.aspx'}
+  ]},
+  {nome:'Milho', tipo:'grao', icone:'🌽', fontes:[
+    {label:'CEPEA/ESALQ — indicador oficial', url:'https://www.cepea.org.br/br/indicador/milho.aspx'}
+  ]},
+  {nome:'Sorgo', tipo:'grao', icone:'🌾', fontes:[],
+   obs:'Sem indicador diário oficial nacional. Referência usual no mercado: acompanhar o preço do milho, já que o sorgo é seu substituto em ração.'},
+  {nome:'Boi gordo', tipo:'pecuaria', icone:'🐂', fontes:[
+    {label:'CEPEA/ESALQ — indicador oficial', url:'https://www.cepea.org.br/br/indicador/boi-gordo.aspx'},
+    {label:'Scot Consultoria — detalhe por praça', url:'https://www.scotconsultoria.com.br/cotacoes/boi-gordo/'}
+  ]},
+  {nome:'Vaca gorda', tipo:'pecuaria', icone:'🐄', fontes:[
+    {label:'CEPEA/ESALQ — indicador (boi gordo)', url:'https://www.cepea.org.br/br/indicador/boi-gordo.aspx'},
+    {label:'Scot Consultoria — detalhe por praça', url:'https://www.scotconsultoria.com.br/cotacoes/vaca-gorda/'}
+  ]}
+];
+function filtrarCotacoes(tipo){
+  window._cotFiltroAtivo = tipo;
+  document.querySelectorAll('#cotFiltros .subtab').forEach(x=>x.classList.toggle('active', x.dataset.f===tipo));
+  renderCotacoes();
+}
+function renderCotacoes(){
+  const box = document.getElementById('cotacoesList');
+  if(!box) return;
+  const busca = (document.getElementById('cot_busca')?.value || '').toLowerCase().trim();
+  const filtro = window._cotFiltroAtivo || 'todos';
+  const itens = COTACOES_FONTES.filter(it=>{
+    if(filtro!=='todos' && it.tipo!==filtro) return false;
+    if(busca && !it.nome.toLowerCase().includes(busca)) return false;
+    return true;
+  });
+  if(!itens.length){ box.innerHTML='<div class="result-note">Nenhuma commodity encontrada</div>'; return; }
+  box.innerHTML = itens.map(it=>{
+    const botoes = it.fontes.map(f=>`<a href="${f.url}" target="_blank" rel="noopener" style="display:block;margin-top:6px;padding:10px;background:var(--cinza-cl);color:var(--verde-esc);border-radius:10px;font-size:12px;font-weight:700;text-decoration:none">🔗 ${f.label}</a>`).join('');
+    const obs = it.obs ? `<div class="result-note">${it.obs}</div>` : '';
+    return `<div class="calc-box" style="margin-bottom:12px"><h3>${it.icone} ${it.nome}</h3>${botoes}${obs}</div>`;
+  }).join('');
+}
+
 /* ---- INIT ---- */
 function initApp(){
   try{
@@ -1085,6 +1151,7 @@ function initApp(){
   try{ renderOrcamentos(); }catch(e){ console.warn('orcamentos',e); }
   try{ renderSaber(); }catch(e){ console.warn('saber',e); }
   try{ renderLearn(); }catch(e){ console.warn('learn',e); }
+  try{ renderCotacoes(); }catch(e){ console.warn('cotacoes',e); }
   try{ loadApiKey(); }catch(e){ console.warn('apikey',e); }
   try{ initCloudUI(); }catch(e){ console.warn('cloud',e); }
   try{
