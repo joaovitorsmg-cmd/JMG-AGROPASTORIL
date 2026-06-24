@@ -114,6 +114,15 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .result-note{font-size:11px;color:var(--cinza);margin-top:10px;font-style:italic}
 .badge-tec{display:inline-block;background:var(--ouro);color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px;vertical-align:middle}
 
+/* recomendação técnica (nutrição animal) */
+.nut-reco{background:#fff8e6;border:2px solid var(--ouro);border-radius:12px;padding:14px;margin:4px 0 16px;font-size:13px;line-height:1.5;color:var(--txt)}
+.nut-reco-tipo{font-size:15px;font-weight:800;color:var(--verde-esc);margin-bottom:4px}
+.nut-reco-dose{font-size:13px;font-weight:700;color:var(--ouro);margin-bottom:6px}
+.nut-reco p{margin-top:4px}
+.nut-alert{background:#fdecea;border-left:4px solid var(--verm);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#7a2018}
+.btn-mini{display:inline-block;margin-top:10px;padding:9px 16px;background:var(--verde);color:#fff;border-radius:10px;font-size:12px;font-weight:700}
+.btn-mini:active{background:var(--verde-esc)}
+
 /* tabs internas */
 .subtabs{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px}
 .subtab{padding:8px 16px;background:#fff;border-radius:20px;font-size:13px;font-weight:600;color:var(--cinza);white-space:nowrap;box-shadow:var(--sombra);border:2px solid transparent}
@@ -434,31 +443,173 @@ input,select,textarea{font-family:inherit;font-size:15px}
   <!-- NUTRICAO -->
   <div class="calc-pane" id="c-nutricao" style="display:none">
     <div class="calc-box">
-      <h3>Consumo e duração do suplemento <span class="badge-tec">Nutrição Animal</span></h3>
-      <div class="field">
-        <label>Produto / consumo-alvo</label>
-        <select id="n_prod" onchange="presetNut()">
-          <option value="0.09">Sal Mineral (manutenção) — ~30-40 g/100kg PV</option>
-          <option value="0.15">Sal Mineral Proteico — ~50 g/100kg PV</option>
-          <option value="0.3">Proteico-Energético (seca) — ~0,3% PV</option>
-          <option value="0.5">Proteico-Energético (águas) — ~0,5% PV</option>
-          <option value="0.5">Ração Bezerro / Creep Feeding — ~0,5% PV</option>
-          <option value="1.5">Concentrado Confinamento — ~1,5% PV</option>
-          <option value="custom">Personalizado (g/cab/dia)</option>
+      <h3>Indicação de dieta e consumo <span class="badge-tec">Nutrição Animal</span></h3>
+
+      <div class="prod-cat" style="margin-top:0">Dados do animal e do lote</div>
+      <div class="row2">
+        <div class="field"><label>Categoria animal</label>
+          <select id="nu_categoria" onchange="atualizarRecomendacaoNut()">
+            <option value="bezerro">Bezerro</option>
+            <option value="garrote">Garrote</option>
+            <option value="novilha">Novilha</option>
+            <option value="vaca">Vaca</option>
+            <option value="boi_recria" selected>Boi em recria</option>
+            <option value="boi_terminacao">Boi em terminação</option>
+          </select>
+        </div>
+        <div class="field"><label>Sexo</label>
+          <select id="nu_sexo">
+            <option value="macho">Macho</option>
+            <option value="femea">Fêmea</option>
+            <option value="misto">Lote misto</option>
+          </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Peso vivo médio (kg)</label><input type="number" id="nu_peso" placeholder="ex: 380"></div>
+        <div class="field"><label>Nº de animais</label><input type="number" id="nu_qtd" placeholder="ex: 80"></div>
+      </div>
+      <div class="field"><label>Idade (meses, opcional)</label><input type="number" id="nu_idade" placeholder="ex: 8" oninput="atualizarRecomendacaoNut()"></div>
+
+      <div class="prod-cat">Sistema, objetivo e dieta</div>
+      <div class="row2">
+        <div class="field"><label>Sistema de produção</label>
+          <select id="nu_sistema" onchange="atualizarRecomendacaoNut()">
+            <option value="pasto" selected>Pasto</option>
+            <option value="semiconfinamento">Semi-confinamento</option>
+            <option value="confinamento">Confinamento</option>
+            <option value="ilp">Integração lavoura-pecuária</option>
+          </select>
+        </div>
+        <div class="field"><label>Objetivo</label>
+          <select id="nu_objetivo" onchange="atualizarRecomendacaoNut()">
+            <option value="manutencao">Manutenção</option>
+            <option value="ganho_moderado" selected>Ganho moderado</option>
+            <option value="ganho_acelerado">Ganho acelerado</option>
+            <option value="reproducao">Reprodução</option>
+            <option value="lactacao">Lactação</option>
+            <option value="terminacao">Terminação</option>
+          </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Alimento principal</label>
+          <select id="nu_alimento" onchange="atualizarRecomendacaoNut()">
+            <option value="pastagem_seca">Pastagem da seca</option>
+            <option value="pastagem_aguas">Pastagem das águas</option>
+            <option value="silagem">Silagem</option>
+            <option value="cana">Cana-de-açúcar</option>
+            <option value="feno">Feno</option>
+            <option value="tmr">Dieta total misturada (TMR)</option>
+          </select>
+        </div>
+        <div class="field"><label>Estado</label>
+          <select id="nu_estado" onchange="atualizarRecomendacaoNut()">
+            <option value="seca" selected>Seca</option>
+            <option value="aguas">Águas</option>
+          </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Qualidade da forragem</label>
+          <select id="nu_qualidade" onchange="atualizarRecomendacaoNut()">
+            <option value="baixa">Baixa</option>
+            <option value="media" selected>Média</option>
+            <option value="alta">Alta</option>
+          </select>
+        </div>
+        <div class="field"><label>Disponibilidade de pasto</label>
+          <select id="nu_disponibilidade" onchange="atualizarRecomendacaoNut()">
+            <option value="baixa">Baixa</option>
+            <option value="media" selected>Média</option>
+            <option value="alta">Alta</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Escore corporal (1 a 5, opcional)</label>
+        <select id="nu_escore" onchange="atualizarRecomendacaoNut()">
+          <option value="">Não avaliado</option>
+          <option value="1">1 — Muito magro</option>
+          <option value="2">2 — Magro</option>
+          <option value="3">3 — Regular</option>
+          <option value="4">4 — Gordo</option>
+          <option value="5">5 — Muito gordo</option>
+        </select>
+      </div>
+
+      <div class="prod-cat">Meta de desempenho (opcional)</div>
+      <div class="row2">
+        <div class="field"><label>Peso de entrada (kg)</label><input type="number" id="nu_pesoEntrada" placeholder="ex: 320" oninput="atualizarRecomendacaoNut()"></div>
+        <div class="field"><label>Peso desejado (kg)</label><input type="number" id="nu_pesoDesejado" placeholder="ex: 420" oninput="atualizarRecomendacaoNut()"></div>
+      </div>
+      <div class="field"><label>Dias para atingir a meta</label><input type="number" id="nu_diasMeta" placeholder="ex: 120" oninput="atualizarRecomendacaoNut()"></div>
+
+      <div class="nut-reco" id="nu_recoBox"></div>
+
+      <div class="prod-cat">Produto utilizado</div>
+      <div class="field autoc-box">
+        <label>Nome do produto</label>
+        <input id="nu_prod" placeholder="digite para buscar no catálogo" autocomplete="off"
+          oninput="autoPrecoNut();buscarProdutoAutocomplete('nu_prod','nu_prod_sug')" onblur="fecharAutocompleteProduto('nu_prod_sug')">
+        <div class="autoc-list" id="nu_prod_sug" style="display:none"></div>
+      </div>
+      <div class="field"><label>Tipo de produto</label>
+        <select id="nu_tipo" onchange="presetNutTipo()">
+          <option value="sal_mineral">Sal mineral</option>
+          <option value="proteinado">Proteinado (baixo consumo)</option>
+          <option value="proteico_energetico">Proteico-energético</option>
+          <option value="racao">Ração / concentrado de recria</option>
+          <option value="nucleo">Núcleo</option>
+          <option value="premix">Premix</option>
+          <option value="concentrado">Concentrado de confinamento</option>
         </select>
       </div>
       <div class="row2">
-        <div class="field"><label>Nº de cabeças</label><input type="number" id="n_cab" placeholder="ex: 80"></div>
-        <div class="field"><label>Peso médio (kg)</label><input type="number" id="n_peso" value="380"></div>
+        <div class="field"><label>Consumo informado em</label>
+          <select id="nu_modo" onchange="toggleNutModo()">
+            <option value="pv">% do peso vivo</option>
+            <option value="g" selected>g/cabeça/dia</option>
+          </select>
+        </div>
+        <div id="nu_consumo_wrap">
+          <div class="field" id="nu_pv_wrap" style="display:none"><label>Consumo (% PV)</label><input type="number" step="0.01" id="nu_pv" placeholder="ex: 0,30"></div>
+          <div class="field" id="nu_g_wrap"><label>Consumo (g/cab/dia)</label><input type="number" id="nu_gcab" placeholder="ex: 80"></div>
+        </div>
       </div>
-      <div class="field" id="n_custom_wrap" style="display:none"><label>Consumo (g/cab/dia)</label><input type="number" id="n_custom" placeholder="ex: 100"></div>
-      <div class="field"><label>Quantidade comprada (kg)</label><input type="number" id="n_qtd" placeholder="ex: 300 (10 sacos de 30kg)"></div>
-      <button class="btn-calc" onclick="calcNut()">Calcular</button>
+
+      <div class="prod-cat" style="font-size:12px">Composição técnica do produto (opcional)</div>
+      <div class="row2">
+        <div class="field"><label>Proteína bruta (%)</label><input type="number" id="nu_pb" placeholder="ex: 20"></div>
+        <div class="field"><label>NDT (%)</label><input type="number" id="nu_ndt" placeholder="ex: 65"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Cálcio (%)</label><input type="number" step="0.01" id="nu_ca" placeholder="ex: 1,5"></div>
+        <div class="field"><label>Fósforo (%)</label><input type="number" step="0.01" id="nu_p" placeholder="ex: 6"></div>
+      </div>
+      <div class="field"><label>Ureia (%)</label><input type="number" step="0.01" id="nu_ureia" placeholder="ex: 10"></div>
+
+      <div class="prod-cat">Preço e estoque</div>
+      <div class="row2">
+        <div class="field"><label>Preço do produto (R$)</label><input type="number" step="0.01" id="nu_preco" placeholder="ex: 95,00"></div>
+        <div class="field"><label>Preço é por</label>
+          <select id="nu_precoUnidade">
+            <option value="1">Kg</option>
+            <option value="25" selected>Saco de 25 kg</option>
+            <option value="30">Saco de 30 kg</option>
+            <option value="40">Saco de 40 kg</option>
+            <option value="1000">Tonelada</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>Quantidade em estoque/comprada (kg, opcional)</label><input type="number" id="nu_estoque" placeholder="ex: 300 (10 sacos de 30kg)"></div>
+
+      <button class="btn-calc" onclick="calcNutricao()">Calcular indicação e consumo</button>
+
       <div class="result" id="r_nut">
-        <div class="result-main" id="rn_dias">—</div>
-        <div class="result-unit">dias de duração do estoque</div>
+        <div class="result-main" id="rn_main">—</div>
+        <div class="result-unit" id="rn_unit">kg/dia do lote</div>
         <div class="result-detail" id="rn_detail"></div>
-        <div class="result-note">Consumo/dia = cabeças × (% PV × peso). Duração = qtd comprada ÷ consumo diário. Já gera o alerta de recompra.</div>
+        <div class="result-note">Estimativa zootécnica simplificada para apoio comercial — sempre valide a formulação final com o nutricionista ou nosso suporte técnico antes de fechar a recomendação com o cliente.</div>
       </div>
     </div>
   </div>
@@ -1034,6 +1185,7 @@ function switchCalc(c){
   document.querySelectorAll('#calcTabs .subtab').forEach(t=>t.classList.toggle('active',t.dataset.c===c));
   if(c==='precos') renderListaPrecos();
   if(c==='rapido'){ renderRapidoItens(); }
+  if(c==='nutricao'){ atualizarRecomendacaoNut(); }
 }
 
 /* SEMENTES */
@@ -1119,31 +1271,185 @@ function calcPasto(){
   document.getElementById('r_pasto').classList.add('show');
 }
 
-/* NUTRICAO */
-function presetNut(){
-  const v=document.getElementById('n_prod').value;
-  document.getElementById('n_custom_wrap').style.display=(v==='custom')?'block':'none';
+/* NUTRIÇÃO ANIMAL — indicação técnica + cálculo de consumo/custo */
+const NUT_TIPOS={
+  sal_mineral:        {label:'Sal mineral',                   modo:'g',  faixa:[50,100],    pb:null,     nota:'repõe macro/microminerais — não cobre déficit de energia/proteína da forragem.'},
+  proteinado:         {label:'Sal proteinado (baixo consumo)',modo:'pv', faixa:[0.10,0.15], pb:[15,30],  nota:'mineral + proteína/NNP em baixo consumo — sustenta o boi na seca.'},
+  proteico_energetico:{label:'Proteico-energético',           modo:'pv', faixa:[0.30,0.50], pb:[20,30],  nota:'mais energia que o proteinado — permite ganho mesmo com forragem fraca.'},
+  racao:              {label:'Ração / concentrado de recria', modo:'pv', faixa:[0.50,1.00], pb:[14,20],  nota:'reforço energético-proteico para recria a pasto ou semi-confinamento.'},
+  nucleo:             {label:'Núcleo',                        modo:'pv', faixa:[0.05,0.30], pb:[30,45],  nota:'alta concentração — entra na mistura do concentrado, não se fornece puro.'},
+  premix:             {label:'Premix vitamínico-mineral',     modo:'pv', faixa:[0.01,0.05], pb:null,     nota:'micro-inclusão — vitaminas/minerais diluídos dentro da ração ou núcleo.'},
+  concentrado:        {label:'Concentrado de confinamento',   modo:'pv', faixa:[1.00,1.80], pb:[12,16],  nota:'dieta de alto grão — terminação intensiva em confinamento.'}
+};
+
+function _nutFatorDose(){
+  // 0 = ponta inferior da faixa (forragem boa / águas / pasto abundante) ... 1 = ponta superior (forragem ruim / seca / pasto escasso)
+  const estado=document.getElementById('nu_estado').value;
+  const qualidade=document.getElementById('nu_qualidade').value;
+  const disp=document.getElementById('nu_disponibilidade').value;
+  let f=0.5;
+  if(estado==='seca') f+=0.2; else f-=0.2;
+  if(qualidade==='baixa') f+=0.2; else if(qualidade==='alta') f-=0.2;
+  if(disp==='baixa') f+=0.15; else if(disp==='alta') f-=0.15;
+  return Math.max(0,Math.min(1,f));
 }
-function calcNut(){
-  const prodVal=document.getElementById('n_prod').value;
-  const cab=+document.getElementById('n_cab').value;
-  const peso=+document.getElementById('n_peso').value;
-  const qtd=+document.getElementById('n_qtd').value;
-  if(!cab||!qtd){alert('Preencha cabeças e quantidade comprada');return;}
-  let consumoCab; // g/cab/dia
-  if(prodVal==='custom'){consumoCab=+document.getElementById('n_custom').value;}
-  else{consumoCab=(parseFloat(prodVal)/100)*peso*1000;} // %PV * peso(kg) * 1000 = g
-  if(!consumoCab){alert('Informe o consumo');return;}
-  const consumoTotalDia=cab*consumoCab; // g/dia
-  const dias=Math.round(qtd*1000/consumoTotalDia);
-  const fim=new Date(Date.now()+dias*86400000);
-  const consumoMes=consumoTotalDia*30/1000;
+function doseParaTipo(tipoKey){
+  const t=NUT_TIPOS[tipoKey]; if(!t) return null;
+  const f=_nutFatorDose();
+  const dose=t.faixa[0]+(t.faixa[1]-t.faixa[0])*f;
+  return {modo:t.modo, dose: t.modo==='g'?Math.round(dose):Math.round(dose*100)/100};
+}
+function sugerirTipoNut(){
+  const sistema=document.getElementById('nu_sistema').value;
+  const objetivo=document.getElementById('nu_objetivo').value;
+  const estado=document.getElementById('nu_estado').value;
+  const qualidade=document.getElementById('nu_qualidade').value;
+  if(sistema==='confinamento') return 'concentrado';
+  if(sistema==='semiconfinamento'){
+    if(objetivo==='ganho_acelerado'||objetivo==='terminacao') return 'racao';
+    if(objetivo==='manutencao') return (estado==='seca'||qualidade==='baixa') ? 'proteinado' : 'sal_mineral';
+    return 'racao';
+  }
+  // pasto ou integração lavoura-pecuária
+  if(objetivo==='manutencao') return (estado==='seca'||qualidade==='baixa') ? 'proteinado' : 'sal_mineral';
+  if(objetivo==='ganho_acelerado'||objetivo==='terminacao') return 'racao';
+  return 'proteico_energetico'; // ganho_moderado, reproducao, lactacao
+}
+
+let _ultimaRecoNut=null;
+function atualizarRecomendacaoNut(){
+  const box=document.getElementById('nu_recoBox'); if(!box) return;
+  const tipoKey=sugerirTipoNut();
+  const t=NUT_TIPOS[tipoKey];
+  const dose=doseParaTipo(tipoKey);
+  _ultimaRecoNut={tipoKey,dose};
+
+  const categoria=document.getElementById('nu_categoria').value;
+  const sistema=document.getElementById('nu_sistema').value;
+  const alimento=document.getElementById('nu_alimento').value;
+  const idade=+document.getElementById('nu_idade').value||0;
+  const alertas=[];
+  if(alimento==='cana') alertas.push('Cana-de-açúcar pede atenção ao enxofre e à ureia — não exceda o NNP recomendado pelo fabricante do produto.');
+  if(alimento==='tmr') alertas.push('Em dieta total misturada (TMR), núcleo/premix devem ser balanceados dentro da mistura — confirme a formulação com o nutricionista.');
+  if(categoria==='bezerro' && idade>0 && idade<4) alertas.push('Bezerro com rúmen ainda em desenvolvimento (< 4 meses) — evite produtos com ureia.');
+
+  let gmdTxt='';
+  const pe=+document.getElementById('nu_pesoEntrada').value;
+  const pd=+document.getElementById('nu_pesoDesejado').value;
+  const dm=+document.getElementById('nu_diasMeta').value;
+  if(pe&&pd&&dm){
+    const gmd=(pd-pe)/dm;
+    gmdTxt=`Ganho médio diário implícito: <b>${gmd.toFixed(2)} kg/dia</b> (${pe}kg → ${pd}kg em ${dm} dias).`;
+    if(gmd<=0) alertas.push('Peso desejado igual ou menor que o peso de entrada — confira os valores da meta.');
+    else if(gmd>1.3 && sistema==='pasto') alertas.push('Meta de ganho ambiciosa para um sistema só a pasto — considere semi-confinamento/confinamento ou um produto mais energético.');
+  }
+
+  const doseTxt = dose.modo==='g' ? `${dose.dose} g/cabeça/dia` : `${dose.dose}% do peso vivo`;
+  let html=`<div class="nut-reco-tipo">🎯 Indicação técnica: ${t.label}</div>
+    <div class="nut-reco-dose">Consumo sugerido: ${doseTxt}</div>
+    <p>${t.nota}</p>`;
+  if(gmdTxt) html+=`<p>${gmdTxt}</p>`;
+  alertas.forEach(a=>{ html+=`<div class="nut-alert">⚠️ ${a}</div>`; });
+  html+=`<button type="button" class="btn-mini" onclick="aplicarRecomendacaoNut()">✅ Usar esta indicação no formulário</button>`;
+  box.innerHTML=html;
+}
+function aplicarRecomendacaoNut(){
+  if(!_ultimaRecoNut) return;
+  document.getElementById('nu_tipo').value=_ultimaRecoNut.tipoKey;
+  document.getElementById('nu_modo').value=_ultimaRecoNut.dose.modo;
+  toggleNutModo();
+  if(_ultimaRecoNut.dose.modo==='g') document.getElementById('nu_gcab').value=_ultimaRecoNut.dose.dose;
+  else document.getElementById('nu_pv').value=_ultimaRecoNut.dose.dose;
+  const t=NUT_TIPOS[_ultimaRecoNut.tipoKey];
+  if(t.pb) document.getElementById('nu_pb').value=Math.round((t.pb[0]+t.pb[1])/2);
+}
+function presetNutTipo(){
+  const tipoKey=document.getElementById('nu_tipo').value;
+  const t=NUT_TIPOS[tipoKey]; if(!t) return;
+  document.getElementById('nu_modo').value=t.modo;
+  toggleNutModo();
+  const dose=doseParaTipo(tipoKey);
+  if(dose.modo==='g') document.getElementById('nu_gcab').value=dose.dose;
+  else document.getElementById('nu_pv').value=dose.dose;
+}
+function toggleNutModo(){
+  const modo=document.getElementById('nu_modo').value;
+  document.getElementById('nu_pv_wrap').style.display = modo==='pv' ? 'block':'none';
+  document.getElementById('nu_g_wrap').style.display = modo==='g' ? 'block':'none';
+}
+function autoPrecoNut(){
+  const nome=document.getElementById('nu_prod').value.trim().toLowerCase();
+  if(!nome) return;
+  const match=(DB.listaPrecos||[]).find(it=>it.produto.toLowerCase()===nome);
+  if(match){
+    document.getElementById('nu_preco').value=match.preco;
+    if(match.unidade==='kg') document.getElementById('nu_precoUnidade').value='1';
+  }
+}
+function calcNutricao(){
+  const cab=+document.getElementById('nu_qtd').value;
+  const peso=+document.getElementById('nu_peso').value;
+  if(!cab||!peso){alert('Preencha o peso vivo médio e o número de animais');return;}
+
+  const modo=document.getElementById('nu_modo').value;
+  let consumoCabG; // g/cab/dia
+  if(modo==='g'){ consumoCabG=+document.getElementById('nu_gcab').value; }
+  else{ const pv=+document.getElementById('nu_pv').value; consumoCabG=(pv/100)*peso*1000; }
+  if(!consumoCabG){alert('Informe o consumo (% do peso vivo ou g/cabeça/dia)');return;}
+
+  const consumoLoteKgDia=(consumoCabG*cab)/1000;
+  const consumoCabKgMes=consumoCabG*30/1000;
+  const consumoCabKgAno=consumoCabG*365/1000;
+  const consumoLoteKgMes=consumoLoteKgDia*30;
+  const consumoLoteKgAno=consumoLoteKgDia*365;
+  const sacos25=consumoLoteKgMes/25, sacos30=consumoLoteKgMes/30, sacos40=consumoLoteKgMes/40;
+
+  const precoVal=+document.getElementById('nu_preco').value||0;
+  const fatorKg=+document.getElementById('nu_precoUnidade').value||1;
+  const precoPorKg=precoVal/fatorKg;
+  const custoCabDia=(consumoCabG/1000)*precoPorKg;
+  const custoCabMes=custoCabDia*30;
+  const custoLoteMes=custoCabMes*cab;
+
+  const tipoKey=document.getElementById('nu_tipo').value;
+  const tipoLabel=(NUT_TIPOS[tipoKey]||{}).label||'Produto';
+  const nomeProd=document.getElementById('nu_prod').value.trim();
+
   let html=`
-    <div class="result-line"><span>Consumo por cabeça</span><b>${consumoCab.toFixed(0)} g/dia</b></div>
-    <div class="result-line"><span>Consumo do lote</span><b>${(consumoTotalDia/1000).toFixed(1)} kg/dia</b></div>
-    <div class="result-line"><span>Consumo mensal</span><b>${consumoMes.toFixed(0)} kg (~${Math.ceil(consumoMes/30)} sacos/mês)</b></div>
-    <div class="result-line"><span>Acaba em</span><b>${fim.toLocaleDateString('pt-BR')}</b></div>`;
-  document.getElementById('rn_dias').textContent=dias;
+    <div class="result-line"><span>Produto</span><b>${nomeProd||tipoLabel}</b></div>
+    <div class="result-line"><span>Consumo por animal/dia</span><b>${consumoCabG.toFixed(0)} g</b></div>
+    <div class="result-line"><span>Consumo por animal/mês</span><b>${consumoCabKgMes.toFixed(1)} kg</b></div>
+    <div class="result-line"><span>Consumo por animal/ano</span><b>${consumoCabKgAno.toFixed(0)} kg</b></div>
+    <div class="result-line"><span>Consumo do lote/dia</span><b>${consumoLoteKgDia.toFixed(1)} kg</b></div>
+    <div class="result-line"><span>Consumo do lote/mês</span><b>${consumoLoteKgMes.toFixed(0)} kg</b></div>
+    <div class="result-line"><span>Consumo do lote/ano</span><b>${consumoLoteKgAno.toFixed(0)} kg</b></div>
+    <div class="result-line"><span>Sacos de 25 kg/mês</span><b>${Math.ceil(sacos25)}</b></div>
+    <div class="result-line"><span>Sacos de 30 kg/mês</span><b>${Math.ceil(sacos30)}</b></div>
+    <div class="result-line"><span>Sacos de 40 kg/mês</span><b>${Math.ceil(sacos40)}</b></div>`;
+
+  if(precoVal){
+    html+=`
+    <div class="result-line"><span>Preço por kg</span><b>R$ ${precoPorKg.toFixed(2)}</b></div>
+    <div class="result-line"><span>Custo por animal/dia</span><b>R$ ${custoCabDia.toFixed(2)}</b></div>
+    <div class="result-line"><span>Custo por animal/mês</span><b>R$ ${custoCabMes.toFixed(2)}</b></div>
+    <div class="result-line"><span>Custo do lote/mês</span><b>R$ ${custoLoteMes.toFixed(2)}</b></div>`;
+  }
+
+  const pb=+document.getElementById('nu_pb').value, ndt=+document.getElementById('nu_ndt').value,
+        ca=+document.getElementById('nu_ca').value, p=+document.getElementById('nu_p').value,
+        ureia=+document.getElementById('nu_ureia').value;
+  const comp=[pb&&('PB '+pb+'%'),ndt&&('NDT '+ndt+'%'),ca&&('Ca '+ca+'%'),p&&('P '+p+'%'),ureia&&('Ureia '+ureia+'%')].filter(Boolean);
+  if(comp.length) html+=`<div class="result-line" style="margin-top:8px;border-top:1px dashed #b8d4ea;padding-top:8px"><span>Composição informada</span><b>${comp.join(' · ')}</b></div>`;
+
+  const estoqueKg=+document.getElementById('nu_estoque').value;
+  if(estoqueKg){
+    const dias=Math.floor(estoqueKg/consumoLoteKgDia);
+    const fim=new Date(Date.now()+dias*86400000);
+    html+=`<div class="result-line"><span>Estoque dura</span><b>${dias} dias (até ${fim.toLocaleDateString('pt-BR')})</b></div>`;
+  }
+
+  document.getElementById('rn_main').textContent=consumoLoteKgDia.toFixed(1);
+  document.getElementById('rn_unit').textContent=`kg/dia do lote (${cab} animais)`;
   document.getElementById('rn_detail').innerHTML=html;
   document.getElementById('r_nut').classList.add('show');
 }
