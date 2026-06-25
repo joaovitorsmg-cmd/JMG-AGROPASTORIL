@@ -122,6 +122,9 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .nut-alert{background:#fdecea;border-left:4px solid var(--verm);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#7a2018}
 .btn-mini{display:inline-block;margin-top:10px;padding:9px 16px;background:var(--verde);color:#fff;border-radius:10px;font-size:12px;font-weight:700}
 .btn-mini:active{background:var(--verde-esc)}
+.nut-duracao{background:#eaf6ee;border:2px solid var(--verde);border-radius:12px;padding:12px 14px;margin:14px 0 0;font-size:13px;line-height:1.5;color:var(--txt);font-weight:600}
+.nut-duracao b{color:var(--verde-esc)}
+.nut-duracao.pendente{background:#fff8e6;border:2px solid var(--ouro);color:#7a5b00;font-weight:500}
 
 /* tabs internas */
 .subtabs{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px}
@@ -363,16 +366,17 @@ input,select,textarea{font-family:inherit;font-size:15px}
         <div class="hint" id="s_pop_hint">Soja: 250–350 mil · Milho: 60–90 mil · Sorgo: 140–170 mil</div>
       </div>
       <div class="row2">
-        <div class="field"><label>Germinação (%)</label><input type="number" id="s_germ" value="80"></div>
+        <div class="field"><label>VC — Valor Cultural (%)</label><input type="number" id="s_vc" value="80"><div class="hint">Germinação × Pureza ÷ 100 — vem do boletim/embalagem da semente</div></div>
         <div class="field"><label>PMS (g)</label><input type="number" id="s_pms" placeholder="peso mil sem."><div class="hint">Soja ~200 · Milho ~300</div></div>
       </div>
+      <div class="hint" style="margin:-6px 0 12px">Cálculo por PMS (peso de mil semente) + VC — não precisa do SPV aqui. Para forrageira/capim, o cálculo é por SPV na aba Pastagem.</div>
       <div class="field"><label>Área (hectares)</label><input type="number" id="s_area" placeholder="opcional — total"></div>
       <button class="btn-calc" onclick="calcSementes()">Calcular</button>
       <div class="result" id="r_sementes">
         <div class="result-main" id="rs_kgha">—</div>
         <div class="result-unit">kg de semente por hectare</div>
         <div class="result-detail" id="rs_detail"></div>
-        <div class="result-note">Fórmula: (sementes/ha × PMS) ÷ 1.000.000, com +10% de margem de perdas. Sempre confira o VC impresso na embalagem.</div>
+        <div class="result-note">Fórmula: sementes/ha = (população desejada ÷ VC%) × 1,1 (margem de perdas); kg/ha = (sementes/ha × PMS) ÷ 1.000.000. Sempre confira o VC impresso na embalagem.</div>
       </div>
     </div>
   </div>
@@ -609,6 +613,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
       <div class="result" id="r_nut">
         <div class="result-main" id="rn_main">—</div>
         <div class="result-unit" id="rn_unit">kg/dia do lote</div>
+        <div class="nut-duracao" id="nu_duracaoBox" style="display:none"></div>
         <div class="result-detail" id="rn_detail"></div>
         <div class="result-note">Estimativa zootécnica simplificada para apoio comercial — sempre valide a formulação final com o nutricionista ou nosso suporte técnico antes de fechar a recomendação com o cliente.</div>
       </div>
@@ -1256,22 +1261,22 @@ function switchCalc(c){
 }
 
 /* SEMENTES */
-const presetsSem={soja:{pop:300000,pms:200,germ:80},milho:{pop:65000,pms:300,germ:90},
-  sorgo:{pop:160000,pms:28,germ:80},forrageira:{pop:0,pms:0,germ:0}};
+const presetsSem={soja:{pop:300000,pms:200,vc:80},milho:{pop:65000,pms:300,vc:90},
+  sorgo:{pop:160000,pms:28,vc:80},forrageira:{pop:0,pms:0,vc:0}};
 function presetSemente(){
   const c=document.getElementById('s_cultura').value;const p=presetsSem[c];
-  if(c==='forrageira'){alert('Para capim use a aba Pastagem (cálculo por Valor Cultural).');document.getElementById('s_cultura').value='soja';return;}
+  if(c==='forrageira'){alert('Para capim use a aba Pastagem (cálculo por Valor Cultural/SPV).');document.getElementById('s_cultura').value='soja';return;}
   if(p.pop)document.getElementById('s_pop').value=p.pop;
   if(p.pms)document.getElementById('s_pms').value=p.pms;
-  if(p.germ)document.getElementById('s_germ').value=p.germ;
+  if(p.vc)document.getElementById('s_vc').value=p.vc;
 }
 function calcSementes(){
   const pop=+document.getElementById('s_pop').value;
-  const germ=+document.getElementById('s_germ').value;
+  const vc=+document.getElementById('s_vc').value;
   const pms=+document.getElementById('s_pms').value;
   const area=+document.getElementById('s_area').value;
-  if(!pop||!germ||!pms){alert('Preencha população, germinação e PMS');return;}
-  const semHa=(pop*100/germ)*1.1;
+  if(!pop||!vc||!pms){alert('Preencha população, VC e PMS');return;}
+  const semHa=(pop*100/vc)*1.1;
   const kgHa=(semHa*pms)/1000000;
   let html=`
     <div class="result-line"><span>Sementes por hectare</span><b>${Math.round(semHa).toLocaleString('pt-BR')}</b></div>
@@ -1487,12 +1492,13 @@ function calcNutricao(){
     <div class="result-line"><span>Consumo por animal/dia</span><b>${consumoCabG.toFixed(0)} g</b></div>
     <div class="result-line"><span>Consumo por animal/mês</span><b>${consumoCabKgMes.toFixed(1)} kg</b></div>
     <div class="result-line"><span>Consumo por animal/ano</span><b>${consumoCabKgAno.toFixed(0)} kg</b></div>
-    <div class="result-line"><span>Consumo do lote/dia</span><b>${consumoLoteKgDia.toFixed(1)} kg</b></div>
+    <div class="result-line"><span>Consumo do lote/dia</span><b>${consumoLoteKgDia.toFixed(1)} kg (${Math.round(consumoLoteKgDia*1000)} g)</b></div>
     <div class="result-line"><span>Consumo do lote/mês</span><b>${consumoLoteKgMes.toFixed(0)} kg</b></div>
     <div class="result-line"><span>Consumo do lote/ano</span><b>${consumoLoteKgAno.toFixed(0)} kg</b></div>
     <div class="result-line"><span>Sacos de 25 kg/mês</span><b>${Math.ceil(sacos25)}</b></div>
     <div class="result-line"><span>Sacos de 30 kg/mês</span><b>${Math.ceil(sacos30)}</b></div>
-    <div class="result-line"><span>Sacos de 40 kg/mês</span><b>${Math.ceil(sacos40)}</b></div>`;
+    <div class="result-line"><span>Sacos de 40 kg/mês</span><b>${Math.ceil(sacos40)}</b></div>
+    <div class="result-note" style="margin-top:6px">💡 Vai vender este produto pro cliente? No orçamento, cole <b>${Math.round(consumoLoteKgDia*1000)}</b> no campo "Consumo do lote (g/dia)" do item — assim o app calcula sozinho a data de recompra.</div>`;
 
   if(precoVal){
     html+=`
@@ -1509,11 +1515,24 @@ function calcNutricao(){
   if(comp.length) html+=`<div class="result-line" style="margin-top:8px;border-top:1px dashed #b8d4ea;padding-top:8px"><span>Composição informada</span><b>${comp.join(' · ')}</b></div>`;
 
   const estoqueKg=+document.getElementById('nu_estoque').value;
+  const duracaoBox=document.getElementById('nu_duracaoBox');
   if(estoqueKg){
     const dias=Math.floor(estoqueKg/consumoLoteKgDia);
     const fim=new Date(Date.now()+dias*86400000);
-    html+=`<div class="result-line"><span>Estoque dura</span><b>${dias} dias (até ${fim.toLocaleDateString('pt-BR')})</b></div>`;
+    let dHtml=`📦 Com <b>${estoqueKg} kg</b> comprados/em estoque, o consumo do lote (${cab} animais) vai durar <b>${dias} dia${dias!==1?'s':''}</b> — acaba em <b>${fim.toLocaleDateString('pt-BR')}</b>.`;
+    if(fatorKg>1){
+      const unidLbl=fatorKg===1000?'tonelada':`saco de ${fatorKg} kg`;
+      const diasPorUnidade=Math.floor(fatorKg/consumoLoteKgDia);
+      if(diasPorUnidade>0) dHtml+=` Cada ${unidLbl} dura ~${diasPorUnidade} dia${diasPorUnidade!==1?'s':''} para esse lote.`;
+    }
+    dHtml+=` <span style="font-weight:400">Use essa data para programar a recompra do cliente.</span>`;
+    duracaoBox.className='nut-duracao';
+    duracaoBox.innerHTML=dHtml;
+  } else {
+    duracaoBox.className='nut-duracao pendente';
+    duracaoBox.innerHTML='ℹ️ Informe a quantidade comprada/em estoque (kg) no campo acima para eu calcular até quando esse produto vai durar e qual a data de recompra.';
   }
+  duracaoBox.style.display='block';
 
   document.getElementById('rn_main').textContent=consumoLoteKgDia.toFixed(1);
   document.getElementById('rn_unit').textContent=`kg/dia do lote (${cab} animais)`;
@@ -2406,7 +2425,7 @@ function abrirNovoOrcamento(editId, presetClienteId){
   if(o){
     // o.itens pode já estar com o frete embutido (valorUnit) de um salvamento anterior;
     // ao reabrir pra editar, volta pro valor base (sem frete) pra não embutir de novo em dobro.
-    _orcDraft.itens = _orcDraft.itens.map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:(it.valorUnitBase!=null?it.valorUnitBase:it.valorUnit)}));
+    _orcDraft.itens = _orcDraft.itens.map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:(it.valorUnitBase!=null?it.valorUnitBase:it.valorUnit), consumoDia:it.consumoDia||0}));
   }
   renderFormOrcamento();
 }
@@ -2418,7 +2437,7 @@ function renderFormOrcamento(){
   if(!_orcDraft.fazendaId && fazendasCli.length) _orcDraft.fazendaId=fazendasCli[0].id;
   const opcoesFazenda=fazendasCli.map(f=>`<option value="${f.id}" ${_orcDraft.fazendaId===f.id?'selected':''}>${f.nome}</option>`).join('');
   const itensHtml=_orcDraft.itens.map((it,i)=>`
-    <div class="result-line" style="cursor:pointer" title="Toque para editar este item" onclick="editarItemOrc(${i})"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.valorUnit)} <button onclick="event.stopPropagation();removerItemOrc(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('') || '<div class="result-note">Nenhum item adicionado ainda</div>';
+    <div class="result-line" style="cursor:pointer" title="Toque para editar este item" onclick="editarItemOrc(${i})"><span>${it.produto} — ${it.qtd} ${it.unidade}${it.consumoDia?` <i style="color:var(--verde)">· dura ~${Math.floor(it.qtd*1000/it.consumoDia)}d</i>`:''}</span><b>${formatBRL(it.qtd*it.valorUnit)} <button onclick="event.stopPropagation();removerItemOrc(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('') || '<div class="result-note">Nenhum item adicionado ainda</div>';
   const total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
   const fd=_orcDraft.frete;
   const jd=_orcDraft.juros;
@@ -2441,6 +2460,7 @@ function renderFormOrcamento(){
       <div class="field"><label>Unidade</label><select id="oi_un"><option value="un">Un.</option><option value="sc">Sc</option><option value="kg">Kg</option><option value="L">L</option></select></div>
       <div class="field"><label>Valor unit. (R$)</label><input type="number" id="oi_valor" placeholder="0"></div>
     </div>
+    <div class="field"><label>Consumo do lote (g/dia, opcional)</label><input type="number" id="oi_consumo" placeholder="ex: 24000"><div class="hint">Liga este item ao alerta de recompra (Home). Pegue esse número na calculadora de Nutrição Animal — "Consumo do lote/dia".</div></div>
     <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde)" onclick="adicionarItemOrc()">➕ Adicionar item</button>
     <div class="result-line" style="margin-top:14px;font-size:16px"><span>Total</span><b>${formatBRL(total)}</b></div>
 
@@ -2550,18 +2570,21 @@ function adicionarItemOrc(){
   const qtd=+document.getElementById('oi_qtd').value||0;
   const unidade=document.getElementById('oi_un').value;
   const valorUnit=+document.getElementById('oi_valor').value||0;
+  const consumoDia=+document.getElementById('oi_consumo').value||0;
   if(!produto||!qtd){alert('Informe produto e quantidade');return;}
   _syncDraftCampos();
   const existente=_orcDraft.itens.find(it=>it.produto.toLowerCase()===produto.toLowerCase() && it.unidade===unidade);
   if(existente){
     existente.qtd+=qtd;
     if(valorUnit) existente.valorUnit=valorUnit;
+    if(consumoDia) existente.consumoDia=consumoDia;
   } else {
-    _orcDraft.itens.push({produto,qtd,unidade,valorUnit});
+    _orcDraft.itens.push({produto,qtd,unidade,valorUnit,consumoDia});
   }
   document.getElementById('oi_prod').value='';
   document.getElementById('oi_qtd').value='';
   document.getElementById('oi_valor').value='';
+  document.getElementById('oi_consumo').value='';
   renderFormOrcamento();
 }
 function editarItemOrc(i){
@@ -2573,6 +2596,7 @@ function editarItemOrc(i){
   document.getElementById('oi_qtd').value=it.qtd;
   document.getElementById('oi_un').value=it.unidade;
   document.getElementById('oi_valor').value=it.valorUnit;
+  document.getElementById('oi_consumo').value=it.consumoDia||'';
 }
 function removerItemOrc(i){
   _syncDraftCampos();
@@ -2609,7 +2633,8 @@ function salvarOrcamento(){
 function abrirOrcamento(id){
   const o=DB.orcamentos.find(x=>x.id===id);
   if(!o) return;
-  const itensHtml=(o.itens||[]).map(it=>`<div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.valorUnit)}</b></div>`).join('')||'<div class="result-note">Sem itens</div>';
+  const itensHtml=(o.itens||[]).map(it=>`<div class="result-line"><span>${it.produto} — ${it.qtd} ${it.unidade}${it.consumoDia?` <i style="color:var(--verde)">· dura ~${Math.floor(it.qtd*1000/it.consumoDia)}d</i>`:''}</span><b>${formatBRL(it.qtd*it.valorUnit)}</b></div>`).join('')||'<div class="result-note">Sem itens</div>';
+  const temConsumoInformado=(o.itens||[]).some(it=>it.consumoDia>0);
   const histHtml=(o.historico||[]).slice().reverse().map(h=>`<div class="result-line"><span>${h.data}</span><b>${h.texto}</b></div>`).join('')||'<div class="result-note">Sem acompanhamento ainda</div>';
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
@@ -2625,6 +2650,7 @@ function abrirOrcamento(id){
     </select>
     <div class="prod-cat">Itens</div>
     <div class="result" style="display:block">${itensHtml}</div>
+    ${temConsumoInformado?(o.status==='fechado'?'<div class="result-note" style="margin-top:6px;color:var(--verde)">🔔 Esses itens entraram nos Alertas de recompra (tela Home) — a data prevista de recompra aparece lá automaticamente.</div>':'<div class="result-note" style="margin-top:6px">ℹ️ Ao fechar este orçamento, os itens com consumo/dia informado entram automaticamente nos Alertas de recompra (Home), com a data prevista de recompra do cliente.</div>'):''}
     <div class="result-line" style="margin-top:10px;font-size:16px"><span>Total</span><b>${formatBRL(o.total||0)}</b></div>
     ${o.frete&&(o.frete.tipo||o.frete.responsavel)?(()=>{
       const embutido=o.valorFreteEmbutido>0?o.valorFreteEmbutido:0;
@@ -2792,7 +2818,7 @@ function aplicarFreteAosItens(itensRaw, frete){
   // Embute o custo de frete no valorUnit dos itens, pra compor o preço final mostrado ao cliente
   // (proposta/PDF/WhatsApp já saem com o valor corrigido). valorUnitBase guarda o preço original
   // digitado, pra permitir reabrir/editar sem embutir o frete de novo em dobro.
-  const itens=itensRaw.map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnitBase:it.valorUnit, valorUnit:it.valorUnit}));
+  const itens=itensRaw.map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnitBase:it.valorUnit, valorUnit:it.valorUnit, consumoDia:it.consumoDia||0}));
   if(!frete || !frete.tipo) return itens;
   const subtotal=itens.reduce((s,it)=>s+it.qtd*it.valorUnitBase,0);
   if(frete.tipo==='percentual'){
@@ -2888,7 +2914,7 @@ function criarComprasDoOrcamento(o){
   const c=DB.clientes.find(x=>x.id===o.clienteId); if(!c) return;
   c.compras=c.compras||[]; c.produtos=c.produtos||[];
   (o.itens||[]).forEach(it=>{
-    c.compras.push({prod:it.produto, qtd:it.qtd, data:new Date().toISOString().slice(0,10), consumoDia:0, valor:it.qtd*it.valorUnit, orcId:o.id});
+    c.compras.push({prod:it.produto, qtd:it.qtd, data:new Date().toISOString().slice(0,10), consumoDia:it.consumoDia||0, valor:it.qtd*it.valorUnit, orcId:o.id});
     if(!c.produtos.includes(it.produto)) c.produtos.push(it.produto);
   });
   o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Venda registrada na ficha do cliente — entra em "Vendas no mês"'});
