@@ -71,6 +71,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
 /* alertas */
 .alert-card{background:#fff;border-radius:14px;padding:14px;box-shadow:var(--sombra);margin-bottom:10px;display:flex;align-items:center;gap:12px;border-left:4px solid var(--laranja)}
 .alert-card.urgent{border-color:var(--verm)}
+.alert-card.ok{border-color:var(--verde)}
 .alert-ico{font-size:24px}
 .alert-body{flex:1}
 .alert-body b{font-size:14px}
@@ -323,6 +324,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
 
   <div class="section-h">🔔 Alertas de recompra</div>
   <div id="alertList"></div>
+  <div class="result-note" style="cursor:pointer;text-align:center;margin-bottom:14px" onclick="nav('consumo')">📦 Ver acompanhamento completo de consumo (todos os clientes) →</div>
 
   <div class="section-h">⚡ Ferramentas rápidas</div>
   <div class="tools">
@@ -763,6 +765,14 @@ input,select,textarea{font-family:inherit;font-size:15px}
 </div>
 <button class="btn-add" id="btnAddOrc" onclick="abrirNovoOrcamento()" style="display:none">+</button>
 
+<!-- ===== ACOMPANHAMENTO DE CONSUMO ===== -->
+<div class="view" id="v-consumo">
+  <div class="view-title">📦 Acompanhamento de consumo</div>
+  <div class="view-desc">Todos os clientes com consumo/dia informado, mesmo os que ainda não entraram em alerta (faltam mais de 15 dias) — toque num item pra abrir o pedido ou a ficha do cliente.</div>
+  <input class="search-bar" id="consSearch" placeholder="🔍 Buscar cliente..." oninput="renderAcompanhamentoConsumo()">
+  <div id="consumoList"></div>
+</div>
+
 <!-- ===== PRODUTOS / SABER ===== -->
 <div class="view" id="v-saber">
   <div class="view-title">Base de Conhecimento</div>
@@ -1088,6 +1098,7 @@ function nav(v){
   document.querySelectorAll('.navbtn').forEach(x=>x.classList.toggle('active',x.dataset.v===v));
   document.getElementById('btnAddCli').style.display = (v==='clientes')?'flex':'none';
   document.getElementById('btnAddOrc').style.display = (v==='orcamentos')?'flex':'none';
+  if(v==='consumo') renderAcompanhamentoConsumo();
   window.scrollTo(0,0);
 }
 function goCalc(c){nav('calc');switchCalc(c);}
@@ -1172,7 +1183,9 @@ function abrirVendasDoMes(){
 function formatBRL(n){ return 'R$ '+(Number(n)||0).toLocaleString('pt-BR',{maximumFractionDigits:0}); }
 
 /* ---- ALERTAS DE RECOMPRA (núcleo) ---- */
-function getAlertas(){
+function getAcompanhamentoConsumo(){
+  // Toda compra com consumo/dia informado, com a previsão de término calculada —
+  // base tanto pros Alertas (Home, só os <=15 dias) quanto pra tela de Acompanhamento (todos).
   const hoje=new Date(); const out=[];
   DB.clientes.forEach(c=>{
     (c.compras||[]).forEach(comp=>{
@@ -1181,12 +1194,37 @@ function getAlertas(){
       const diasDur=comp.qtd*1000/comp.consumoDia; // qtd kg -> g
       const fim=new Date(dataV.getTime()+diasDur*86400000);
       const diasRest=Math.round((fim-hoje)/86400000);
-      if(diasRest<=15){
-        out.push({clienteId:c.id,cliente:c.nome,prod:comp.prod,dias:diasRest,urgent:diasRest<=7});
-      }
+      out.push({clienteId:c.id,cliente:c.nome,prod:comp.prod,qtd:comp.qtd,data:comp.data,consumoDia:comp.consumoDia,dataFim:fim.toISOString().slice(0,10),dias:diasRest,urgent:diasRest<=7,atencao:diasRest>7&&diasRest<=15,orcId:comp.orcId||null});
     });
   });
   return out.sort((a,b)=>a.dias-b.dias);
+}
+function getAlertas(){
+  return getAcompanhamentoConsumo().filter(a=>a.dias<=15);
+}
+function renderAcompanhamentoConsumo(){
+  const q=(document.getElementById('consSearch')?.value||'').toLowerCase();
+  const all=getAcompanhamentoConsumo().filter(a=>a.cliente.toLowerCase().includes(q));
+  const box=document.getElementById('consumoList');
+  if(!box) return;
+  if(!all.length){
+    box.innerHTML='<div class="empty" style="padding:24px"><div class="empty-ico">📦</div>Nenhuma compra com consumo/dia informado ainda.<br>Preencha "Consumo do lote" ao fechar uma venda (Orçamento ou Rápido) ou ao registrar uma compra na ficha do cliente.</div>';
+    return;
+  }
+  box.innerHTML=all.map(a=>{
+    const cls=a.urgent?'urgent':(a.atencao?'':'ok');
+    const ico=a.urgent?'🔴':(a.atencao?'🟠':'🟢');
+    const diasTxt=a.dias<0?`venceu há ${-a.dias} dia${-a.dias!==1?'s':''}`:`acaba em ${a.dias} dia${a.dias!==1?'s':''}`;
+    const abrir=a.orcId?`abrirOrcamento(${a.orcId})`:`abrirCli(${a.clienteId})`;
+    return `<div class="alert-card ${cls}" style="cursor:pointer" onclick="${abrir}">
+      <div class="alert-ico">${ico}</div>
+      <div class="alert-body">
+        <b>${a.cliente}</b>
+        <div class="sub">${a.prod} — ${a.qtd}kg comprado em ${isoParaBR(a.data)} · consumo ${a.consumoDia}g/dia</div>
+        <div class="sub">Previsão de término: <b>${isoParaBR(a.dataFim)}</b> — ${diasTxt}</div>
+      </div>
+    </div>`;
+  }).join('');
 }
 function renderAlertas(){
   const al=getAlertas(); const box=document.getElementById('alertList');
@@ -2681,7 +2719,8 @@ function salvarOrcamento(){
     _orcDraft.historico=[{data:_orcDraft.criadoEm,texto:'Orçamento criado'}];
     DB.orcamentos.push(_orcDraft);
   }
-  saveDB();fecharModal();renderOrcamentos();renderKPIs();
+  if(_orcDraft.status==='fechado' && _orcDraft.comprasGeradas) sincronizarComprasDoOrcamento(_orcDraft);
+  saveDB();fecharModal();renderOrcamentos();renderKPIs();renderAlertas();
   _orcDraft=null;
 }
 function abrirOrcamento(id){
@@ -2945,9 +2984,11 @@ function aplicarStatusOrc(id,status,motivo,pagamento,comissaoConfig,frete){
     else { o.motivoPerda=motivo; o.motivoGanho=null; }
   }
   o.historico.push({data:new Date().toISOString().slice(0,10),texto});
-  if(status==='fechado' && !o.comprasGeradas){
-    criarComprasDoOrcamento(o);
+  if(status==='fechado'){
+    const jaGerado=!!o.comprasGeradas;
+    sincronizarComprasDoOrcamento(o);
     o.comprasGeradas=true;
+    if(!jaGerado) o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Venda registrada na ficha do cliente — entra em "Vendas no mês"'});
   } else if(status!=='fechado' && o.comprasGeradas){
     const c=DB.clientes.find(x=>x.id===o.clienteId);
     if(c) c.compras=(c.compras||[]).filter(cp=>cp.orcId!==o.id);
@@ -2964,14 +3005,19 @@ function aplicarStatusOrc(id,status,motivo,pagamento,comissaoConfig,frete){
   saveDB();renderOrcamentos();renderComissoes();renderKPIs();renderAlertas();
   if(document.getElementById('modal').classList.contains('show')) abrirOrcamento(id);
 }
-function criarComprasDoOrcamento(o){
+function sincronizarComprasDoOrcamento(o){
+  // Idempotente: pode ser chamada de novo (ex: ao editar e resalvar um orçamento já fechado,
+  // pra corrigir consumo/qtd depois do fato) sem duplicar nem perder a data original da compra.
   const c=DB.clientes.find(x=>x.id===o.clienteId); if(!c) return;
   c.compras=c.compras||[]; c.produtos=c.produtos||[];
+  const dataOriginalPorProduto={};
+  c.compras.filter(cp=>cp.orcId===o.id).forEach(cp=>{ if(!(cp.prod in dataOriginalPorProduto)) dataOriginalPorProduto[cp.prod]=cp.data; });
+  c.compras=c.compras.filter(cp=>cp.orcId!==o.id);
   (o.itens||[]).forEach(it=>{
-    c.compras.push({prod:it.produto, qtd:it.qtd, data:new Date().toISOString().slice(0,10), consumoDia:it.consumoDia||0, valor:it.qtd*it.valorUnit, orcId:o.id});
+    const data=dataOriginalPorProduto[it.produto]||new Date().toISOString().slice(0,10);
+    c.compras.push({prod:it.produto, qtd:it.qtd, data, consumoDia:it.consumoDia||0, valor:it.qtd*it.valorUnit, orcId:o.id});
     if(!c.produtos.includes(it.produto)) c.produtos.push(it.produto);
   });
-  o.historico.push({data:new Date().toISOString().slice(0,10),texto:'Venda registrada na ficha do cliente — entra em "Vendas no mês"'});
 }
 function abrirMotivoStatus(id,status){
   const o=DB.orcamentos.find(x=>x.id===id); if(!o)return;
