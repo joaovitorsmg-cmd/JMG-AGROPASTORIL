@@ -1417,6 +1417,8 @@ function atualizarPMSPasto(){
 }
 function calcPasto(){
   const nome=document.getElementById('p_for').value.split('|')[0];
+  const tipo=document.getElementById('p_tipo').value;
+  const saco=tipo==='revestida'?12:25; // só a semente revestida vem em saco de 12kg, as nuas são todas em saco de 25kg
   const spv=+document.getElementById('p_spv').value;
   const vc=+document.getElementById('p_vc').value;
   const pms=+document.getElementById('p_pms').value;
@@ -1439,7 +1441,7 @@ function calcPasto(){
   if(sementesM2) html+=`<div class="result-line"><span>Sementes viáveis alvo</span><b>~${sementesM2.toFixed(0)} sem./m²</b></div>`;
   if(area){
     html+=`<div class="result-line"><span>Total p/ ${area} ha</span><b>${(kgHa*area).toFixed(0)} kg</b></div>`;
-    html+=`<div class="result-line"><span>Sacos de 12 kg</span><b>${Math.ceil(kgHa*area/12)} sacos</b></div>`;
+    html+=`<div class="result-line"><span>Sacos de ${saco} kg</span><b>${Math.ceil(kgHa*area/saco)} sacos</b></div>`;
   }
   document.getElementById('rp_kgha').textContent=kgHa.toFixed(1);
   document.getElementById('rp_detail').innerHTML=html;
