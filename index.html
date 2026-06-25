@@ -677,6 +677,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
         <div class="field"><label>Unidade</label><select id="rp_un"><option value="un">Un.</option><option value="sc">Sc</option><option value="kg">Kg</option><option value="L">L</option></select></div>
         <div class="field"><label>Preço unit. (R$)</label><input type="number" id="rp_preco" placeholder="0"></div>
       </div>
+      <div class="field"><label>Consumo do lote (g/dia, opcional)</label><input type="number" id="rp_consumo" placeholder="ex: 24000"><div class="hint">Liga este item ao alerta de recompra (Home). Pegue esse número na calculadora de Nutrição Animal — "Consumo do lote/dia".</div></div>
       <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde)" onclick="addItemRapido()">➕ Adicionar item</button>
 
       <div class="prod-cat" style="margin-top:14px">Forma de pagamento (proposta)</div>
@@ -1948,10 +1949,12 @@ function addItemRapido(){
   const qtd = +document.getElementById('rp_qtd').value||0;
   const unidade = document.getElementById('rp_un').value.trim()||'un';
   const preco = +document.getElementById('rp_preco').value||0;
+  const consumoDia = +document.getElementById('rp_consumo').value||0;
   if(!produto||!qtd||!preco){ alert('Informe produto, quantidade e preço.'); return; }
-  _rapidoItens.push({produto, qtd, unidade, preco});
+  _rapidoItens.push({produto, qtd, unidade, preco, consumoDia});
   document.getElementById('rp_prod').value=''; document.getElementById('rp_qtd').value='';
   document.getElementById('rp_preco').value=''; document.getElementById('rp_un').value='un';
+  document.getElementById('rp_consumo').value='';
   renderRapidoItens();
 }
 function removerItemRapido(i){ _rapidoItens.splice(i,1); renderRapidoItens(); }
@@ -1963,6 +1966,7 @@ function editarItemRapido(i){
   document.getElementById('rp_qtd').value=it.qtd;
   document.getElementById('rp_un').value=it.unidade;
   document.getElementById('rp_preco').value=it.preco;
+  document.getElementById('rp_consumo').value=it.consumoDia||'';
 }
 function renderRapidoItens(){
   const box = document.getElementById('rapidoItensBox');
@@ -1970,7 +1974,7 @@ function renderRapidoItens(){
   if(!_rapidoItens.length){ box.innerHTML='<div class="result-note">Nenhum item adicionado ainda</div>'; return; }
   const total = _rapidoItens.reduce((s,it)=>s+it.qtd*it.preco,0);
   box.innerHTML = _rapidoItens.map((it,i)=>`
-    <div class="result-line" style="cursor:pointer" title="Toque para editar este item" onclick="editarItemRapido(${i})"><span>${it.produto} — ${it.qtd} ${it.unidade}</span><b>${formatBRL(it.qtd*it.preco)} <button onclick="event.stopPropagation();removerItemRapido(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('')
+    <div class="result-line" style="cursor:pointer" title="Toque para editar este item" onclick="editarItemRapido(${i})"><span>${it.produto} — ${it.qtd} ${it.unidade}${it.consumoDia?` <i style="color:var(--verde)">· dura ~${Math.floor(it.qtd*1000/it.consumoDia)}d</i>`:''}</span><b>${formatBRL(it.qtd*it.preco)} <button onclick="event.stopPropagation();removerItemRapido(${i})" style="color:var(--verm);background:none;border:none;font-weight:700;margin-left:6px">✕</button></b></div>`).join('')
     + `<div class="result-line" style="margin-top:6px;font-size:16px"><span>Subtotal</span><b>${formatBRL(total)}</b></div>`;
   atualizarPreviaFreteRapido();
 }
@@ -2032,7 +2036,7 @@ function atualizarPreviaFreteRapido(){
 }
 function visualizarOrcamentoRapido(){
   if(!_rapidoItens.length){ alert('Adicione ao menos um item.'); return; }
-  const itensBase = _rapidoItens.map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:it.preco}));
+  const itensBase = _rapidoItens.map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:it.preco, consumoDia:it.consumoDia||0}));
   const subtotalBase = itensBase.reduce((s,it)=>s+it.qtd*it.valorUnit,0);
   const frete=lerFreteRapidoForm();
   const itensComFrete = aplicarFreteAosItens(itensBase, frete);
@@ -2069,7 +2073,7 @@ function enviarRapidoParaFormal(){
   const juros = +document.getElementById('rp_juros').value||0;
   const jurosPeriodo = document.getElementById('rp_jurosPeriodo').value;
   const frete = lerFreteRapidoForm();
-  const itensCopy = JSON.parse(JSON.stringify(_rapidoItens)).map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:it.preco}));
+  const itensCopy = JSON.parse(JSON.stringify(_rapidoItens)).map(it=>({produto:it.produto, qtd:it.qtd, unidade:it.unidade, valorUnit:it.preco, consumoDia:it.consumoDia||0}));
   fecharModal();
   nav('orcamentos');
   abrirNovoOrcamento(null, null);
