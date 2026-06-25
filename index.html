@@ -419,19 +419,39 @@ input,select,textarea{font-family:inherit;font-size:15px}
       <div class="field">
         <label>Forrageira (linha JMG Agropastoril)</label>
         <select id="p_for" onchange="presetForr()">
-          <option value="mombaca|3">Mombaça (Panicum) — 3 kg VC</option>
-          <option value="zuri|3.5">BRS Zuri (Panicum) — 3,5 kg VC</option>
-          <option value="tamani|3">BRS Tamani (Panicum) — 3 kg VC</option>
-          <option value="quenia|3.5">BRS Quênia (Panicum) — 3,5 kg VC</option>
-          <option value="massai|3.5">Massai (Panicum) — 3,5 kg VC</option>
-          <option value="paiaguas|4">BRS Paiaguás (Brachiaria) — 4 kg VC</option>
-          <option value="piata|4">BRS Piatã (Brachiaria) — 4 kg VC</option>
-          <option value="xaraes|4">Xaraés (Brachiaria) — 4 kg VC</option>
+          <optgroup label="Panicum maximum">
+            <option value="mombaca|3">Mombaça — 3 kg VC</option>
+            <option value="zuri|3.5">BRS Zuri — 3,5 kg VC</option>
+            <option value="tamani|3">BRS Tamani — 3 kg VC</option>
+            <option value="quenia|3.5">BRS Quênia — 3,5 kg VC</option>
+            <option value="massai|3.5">Massai — 3,5 kg VC</option>
+            <option value="miyagui|3.5">Miyagui — 3,5 kg VC</option>
+          </optgroup>
+          <optgroup label="Brachiaria / Urochloa">
+            <option value="marandu|4">Marandu — 4 kg VC</option>
+            <option value="paiaguas|4">BRS Paiaguás — 4 kg VC</option>
+            <option value="piata|4">BRS Piatã — 4 kg VC</option>
+            <option value="xaraes|4">Xaraés — 4 kg VC</option>
+            <option value="ipypora|4">BRS Ipyporã — 4 kg VC</option>
+            <option value="decumbens|4">Decumbens — 4 kg VC</option>
+            <option value="ruziziensis|4">Ruziziensis — 4 kg VC</option>
+            <option value="humidicola|4">Humidícola — 4 kg VC</option>
+            <option value="llanero|4">Llanero — 4 kg VC</option>
+          </optgroup>
         </select>
       </div>
       <div class="row2">
         <div class="field"><label>Pontos de VC alvo (kg SPV/ha)</label><input type="number" id="p_spv" step="0.5" value="3"></div>
         <div class="field"><label>VC do lote (%)</label><input type="number" id="p_vc" placeholder="ex: 60"><div class="hint">Germ × Pureza ÷ 100</div></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Tipo de semente</label>
+          <select id="p_tipo" onchange="atualizarPMSPasto()">
+            <option value="nua">Nua (sem revestimento)</option>
+            <option value="revestida">Revestida</option>
+          </select>
+        </div>
+        <div class="field"><label>PMS do lote (g/1000 semente)</label><input type="number" id="p_pms" step="0.001" placeholder="ex: 8,96"><div class="hint" id="p_pms_hint">Confira no laudo/embalagem do lote.</div></div>
       </div>
       <div class="field"><label>Área (ha)</label><input type="number" id="p_area" placeholder="opcional"></div>
       <button class="btn-calc" onclick="calcPasto()">Calcular</button>
@@ -439,7 +459,7 @@ input,select,textarea{font-family:inherit;font-size:15px}
         <div class="result-main" id="rp_kgha">—</div>
         <div class="result-unit">kg de semente por hectare</div>
         <div class="result-detail" id="rp_detail"></div>
-        <div class="result-note">Taxa = (kg SPV/ha × 100) ÷ VC do lote. O VC vem impresso na embalagem da semente.</div>
+        <div class="result-note">Taxa = sementes viáveis/m² alvo do cultivar × PMS do lote ÷ VC do lote. PMS e VC vêm impressos no laudo/embalagem — lotes revestidos têm PMS muito maior que sementes nuas, então pedem mais kg/ha pra entregar a mesma densidade de sementes viáveis.</div>
       </div>
     </div>
   </div>
@@ -1255,18 +1275,62 @@ function calcSolo(){
 }
 
 /* PASTAGEM */
+// PMS de referência (g/1000 semente) — tabela de sementes comercializadas, nua x revestida.
+// A revestida pesa muito mais por causa do material de revestimento, sem aumentar germinação/viabilidade.
+const PASTO_PMS={
+  mombaca:{nua:1.532, revestida:6.5},
+  zuri:{nua:1.561, revestida:5.9},
+  tamani:{nua:1.338, revestida:5.1},
+  quenia:{nua:null, revestida:null},
+  massai:{nua:1.365, revestida:5.1},
+  miyagui:{nua:1.662, revestida:null},
+  marandu:{nua:8.96, revestida:25.7},
+  paiaguas:{nua:7.17, revestida:null},
+  piata:{nua:10.029, revestida:28.7},
+  xaraes:{nua:9.96, revestida:29.0},
+  ipypora:{nua:9.63, revestida:null},
+  decumbens:{nua:6.965, revestida:null},
+  ruziziensis:{nua:6.502, revestida:20.7},
+  humidicola:{nua:4.24, revestida:20.8},
+  llanero:{nua:5.277, revestida:20.9}
+};
 function presetForr(){
   const [nome,spv]=document.getElementById('p_for').value.split('|');
   document.getElementById('p_spv').value=spv;
+  atualizarPMSPasto();
+}
+function atualizarPMSPasto(){
+  const nome=document.getElementById('p_for').value.split('|')[0];
+  const tipo=document.getElementById('p_tipo').value;
+  const ref=PASTO_PMS[nome];
+  const pms=ref?ref[tipo]:null;
+  document.getElementById('p_pms').value=pms!=null?pms:'';
+  document.getElementById('p_pms_hint').textContent=pms!=null
+    ? `Referência deste mês (${tipo==='revestida'?'revestida':'nua'}) — ajuste se o laudo do lote informar valor diferente.`
+    : 'Sem referência cadastrada para este cultivar/tipo — informe o PMS do laudo da semente.';
 }
 function calcPasto(){
+  const nome=document.getElementById('p_for').value.split('|')[0];
   const spv=+document.getElementById('p_spv').value;
   const vc=+document.getElementById('p_vc').value;
+  const pms=+document.getElementById('p_pms').value;
   const area=+document.getElementById('p_area').value;
   if(!spv||!vc){alert('Preencha pontos de VC e VC do lote');return;}
-  const kgHa=(spv*100)/vc;
+  const pmsRefNua=PASTO_PMS[nome]&&PASTO_PMS[nome].nua;
+  let kgHa, sementesM2;
+  if(pms&&pmsRefNua){
+    // sementes viáveis/m² alvo é fixado pela referência nua do cultivar — o kg/ha do lote real
+    // (nua ou revestida) é recalculado a partir do PMS informado para entregar a mesma densidade.
+    sementesM2=(spv*100)/pmsRefNua;
+    kgHa=(sementesM2*pms)/vc;
+  } else {
+    kgHa=(spv*100)/vc;
+    sementesM2=pms?(kgHa*vc)/pms:null;
+  }
   let html=`<div class="result-line"><span>Pontos VC alvo</span><b>${spv} kg SPV/ha</b></div>
             <div class="result-line"><span>VC do lote</span><b>${vc}%</b></div>`;
+  if(pms) html+=`<div class="result-line"><span>PMS do lote</span><b>${pms} g/1000 semente</b></div>`;
+  if(sementesM2) html+=`<div class="result-line"><span>Sementes viáveis alvo</span><b>~${sementesM2.toFixed(0)} sem./m²</b></div>`;
   if(area){
     html+=`<div class="result-line"><span>Total p/ ${area} ha</span><b>${(kgHa*area).toFixed(0)} kg</b></div>`;
     html+=`<div class="result-line"><span>Sacos de 12 kg</span><b>${Math.ceil(kgHa*area/12)} sacos</b></div>`;
@@ -2374,6 +2438,8 @@ function renderFormOrcamento(){
   const total=_orcDraft.itens.reduce((s,it)=>s+(it.qtd*it.valorUnit),0);
   const fd=_orcDraft.frete;
   const jd=_orcDraft.juros;
+  const pd=_orcDraft.formaPagamentoPadrao;
+  const hojeISO=new Date().toISOString().slice(0,10);
   modal(`
     <button class="modal-x" onclick="fecharModal()">✕</button>
     <h2>${editId?'Editar orçamento':'Novo orçamento'}</h2>
@@ -2396,6 +2462,27 @@ function renderFormOrcamento(){
     <div class="field"><label>Consumo do lote (g/dia, opcional)</label><input type="number" id="oi_consumo" placeholder="ex: 24000"><div class="hint">Liga este item ao alerta de recompra (Home). Pegue esse número na calculadora de Nutrição Animal — "Consumo do lote/dia".</div></div>
     <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde)" onclick="adicionarItemOrc()">➕ Adicionar item</button>
     <div class="result-line" style="margin-top:14px;font-size:16px"><span>Total</span><b>${formatBRL(total)}</b></div>
+
+    <div class="prod-cat" style="margin-top:14px">Forma de pagamento (proposta)</div>
+    <div class="field"><label>Forma de pagamento</label>
+      <select id="orc_forma" onchange="atualizarVisibilidadeFormaPagamentoOrc()">
+        <option value="vista" ${pd&&pd.forma==='vista'?'selected':''}>À vista</option>
+        <option value="prazo" ${!pd||pd.forma==='prazo'?'selected':''}>A prazo</option>
+        <option value="parcelado" ${pd&&pd.forma==='parcelado'?'selected':''}>Prazo parcelado (boleto)</option>
+        <option value="cartao" ${pd&&pd.forma==='cartao'?'selected':''}>Cartão parcelado</option>
+        <option value="safra" ${pd&&pd.forma==='safra'?'selected':''}>Safra (30/04, 30/05 ou 30/08)</option>
+        <option value="vendor" ${pd&&pd.forma==='vendor'?'selected':''}>Vendor (180 dias)</option>
+      </select>
+    </div>
+    <div id="orc_wrapPrazoSimples" class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="orc_prazo" placeholder="ex: 30" value="${pd&&pd.prazoDias!=null?pd.prazoDias:''}" oninput="atualizarPreviasOrc()"></div>
+    <div id="orc_wrapCartao" class="row2" style="display:none">
+      <div class="field"><label>Nº de parcelas</label><input type="number" id="orc_parcelas" placeholder="2" value="${pd&&pd.parcelas!=null?pd.parcelas:''}" oninput="atualizarPreviasOrc()"></div>
+      <div class="field"><label>Intervalo entre parcelas (dias)</label><input type="number" id="orc_intervalo" placeholder="30" value="${pd&&pd.intervaloDias!=null?pd.intervaloDias:''}" oninput="atualizarPreviasOrc()"></div>
+    </div>
+    <div id="orc_wrapSafra" class="field" style="display:none"><label>Vencimento Safra</label>
+      <select id="orc_safraData" onchange="atualizarPreviasOrc()">${proximasDatasSafra(hojeISO).map(d=>`<option value="${d}" ${pd&&pd.safraData===d?'selected':''}>${isoParaBR(d)}</option>`).join('')}</select>
+    </div>
+    <div id="orc_wrapVendor" class="field" style="display:none"><label>Prazo Vendor (dias)</label><input type="number" id="orc_vendorDias" placeholder="180" value="${pd&&pd.vendorDias!=null?pd.vendorDias:''}" oninput="atualizarPreviasOrc()"></div>
 
     <div class="prod-cat" style="margin-top:14px">Frete (repassado ao cliente, embutido no preço)</div>
     <div class="row2">
@@ -2428,15 +2515,15 @@ function renderFormOrcamento(){
         <option value="dia" ${jd&&jd.periodo==='dia'?'selected':''}>% ao dia</option>
       </select></div>
     </div>
-    <div class="field"><label>Prazo para pagamento (dias)</label><input type="number" id="orc_prazoDias" placeholder="ex: 30" value="${_orcDraft.prazoDiasPadrao||''}" oninput="atualizarPreviasOrc()"></div>
     <div id="orc_previaJuros" class="result-note" style="margin-top:6px"></div>
-    <div class="result-note" style="margin-top:2px">📈 Se houver juros por prazo, o valor também é embutido automaticamente no preço dos itens ao salvar — junto com o frete, compõe o preço final único mostrado ao cliente.</div>
+    <div class="result-note" style="margin-top:2px">📈 O prazo usado pra calcular o juros embutido segue a forma de pagamento escolhida acima (dias do Vendor, vencimento da Safra, parcelas, ou o campo "Prazo para pagamento" quando for "A prazo"). "À vista" não gera juros. Se houver juros, o valor é embutido automaticamente no preço dos itens ao salvar — junto com o frete, compõe o preço final único mostrado ao cliente.</div>
 
     <div class="field" style="margin-top:14px"><label>Validade (dias)</label><input type="number" id="orc_validade" value="${_orcDraft.validadeDias||7}"></div>
     <div class="field"><label>Observações</label><textarea id="orc_obs" placeholder="condições de pagamento, etc.">${_orcDraft.obs||''}</textarea></div>
     <button class="btn-calc" onclick="salvarOrcamento()">${editId?'Salvar alterações':'Criar orçamento'}</button>
   `);
   atualizarCamposFreteOrc();
+  atualizarVisibilidadeFormaPagamentoOrc();
 }
 function onClienteOrcChange(){
   _syncDraftCampos();
@@ -2475,8 +2562,38 @@ function _syncDraftCampos(){
     const jurosPeriodoEl=document.getElementById('orc_jurosPeriodo');
     _orcDraft.juros = jurosVal>0 ? {percentual:jurosVal, periodo:jurosPeriodoEl?jurosPeriodoEl.value:'mes'} : null;
   }
-  const prazoEl=document.getElementById('orc_prazoDias');
-  if(prazoEl) _orcDraft.prazoDiasPadrao=+prazoEl.value||0;
+  const formaEl=document.getElementById('orc_forma');
+  if(formaEl){
+    _orcDraft.formaPagamentoPadrao=lerFormaPagamentoOrc();
+    _orcDraft.prazoDiasPadrao=prazoDiasEfetivoPagamento(_orcDraft.formaPagamentoPadrao);
+  }
+}
+function atualizarVisibilidadeFormaPagamentoOrc(){
+  const formaEl=document.getElementById('orc_forma');
+  if(!formaEl) return;
+  const forma=formaEl.value;
+  document.getElementById('orc_wrapPrazoSimples').style.display=forma==='prazo'?'block':'none';
+  document.getElementById('orc_wrapCartao').style.display=(forma==='cartao'||forma==='parcelado')?'flex':'none';
+  document.getElementById('orc_wrapSafra').style.display=forma==='safra'?'block':'none';
+  document.getElementById('orc_wrapVendor').style.display=forma==='vendor'?'block':'none';
+  atualizarPreviasOrc();
+}
+function lerFormaPagamentoOrc(){
+  const formaEl=document.getElementById('orc_forma');
+  if(!formaEl) return null;
+  const forma=formaEl.value;
+  const pagamento={forma};
+  if(forma==='prazo'){
+    pagamento.prazoDias=+document.getElementById('orc_prazo').value||0;
+  } else if(forma==='parcelado'||forma==='cartao'){
+    pagamento.parcelas=+document.getElementById('orc_parcelas').value||2;
+    pagamento.intervaloDias=+document.getElementById('orc_intervalo').value||30;
+  } else if(forma==='safra'){
+    pagamento.safraData=document.getElementById('orc_safraData').value;
+  } else if(forma==='vendor'){
+    pagamento.vendorDias=+document.getElementById('orc_vendorDias').value||180;
+  }
+  return pagamento;
 }
 function atualizarCamposFreteOrc(){
   const tipoEl=document.getElementById('orc_freteTipo');
