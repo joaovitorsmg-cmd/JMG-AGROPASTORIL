@@ -127,6 +127,30 @@ input,select,textarea{font-family:inherit;font-size:15px}
 .nut-duracao b{color:var(--verde-esc)}
 .nut-duracao.pendente{background:#fff8e6;border:2px solid var(--ouro);color:#7a5b00;font-weight:500}
 
+/* ===== DIAGNÓSTICO FOLIAR (Laudo) ===== */
+.laudo-grupo{font-size:12px;font-weight:800;color:var(--ouro);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px}
+.laudo-nut{margin-bottom:14px}
+.ln-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:5px;flex-wrap:wrap}
+.ln-nome{font-size:13px;font-weight:700;color:var(--txt)}
+.ln-valor{font-size:12px;color:var(--cinza);font-weight:600}
+.ln-badge{font-size:10px;font-weight:800;padding:3px 9px;border-radius:10px;color:#fff;white-space:nowrap}
+.ln-badge.red-alert{background:var(--verm)}
+.ln-badge.green-optimal{background:var(--verde)}
+.ln-badge.blue-excess{background:#2470c4}
+.ln-track{position:relative;height:16px;border-radius:8px;overflow:hidden;display:flex;background:#eee}
+.ln-zone{height:100%}
+.ln-zone.z-baixo{background:#f8d7d3}
+.ln-zone.z-ideal{background:#cdeccb}
+.ln-zone.z-alto{background:#cfe2f7}
+.ln-marker{position:absolute;top:-3px;width:4px;height:22px;border-radius:2px;background:var(--txt);box-shadow:0 0 0 2px #fff}
+.ln-marker.red-alert{background:var(--verm)}
+.ln-marker.green-optimal{background:var(--verde)}
+.ln-marker.blue-excess{background:#2470c4}
+.laudo-resumo{background:#fff8e6;border:2px solid var(--ouro);border-radius:12px;padding:14px;margin:16px 0;font-size:13px;line-height:1.6;color:var(--txt)}
+.laudo-resumo b{color:var(--verde-esc)}
+.laudo-resumo .lim{color:var(--verm);font-weight:800}
+.laudo-dris{background:#eaf3fb;border-left:4px solid #2470c4;border-radius:8px;padding:8px 10px;margin-top:8px;font-size:12px;color:#1a4a75}
+
 /* tabs internas */
 .subtabs{display:flex;gap:8px;margin-bottom:16px;overflow-x:auto;padding-bottom:4px}
 .subtab{padding:8px 16px;background:#fff;border-radius:20px;font-size:13px;font-weight:600;color:var(--cinza);white-space:nowrap;box-shadow:var(--sombra);border:2px solid transparent}
@@ -411,6 +435,59 @@ input,select,textarea{font-family:inherit;font-size:15px}
         <div class="result-unit">toneladas de calcário por hectare</div>
         <div class="result-detail" id="rso_detail"></div>
         <div class="result-note">NC = (V2−V1)×T÷100, corrigido pelo PRNT. Gesso pela %argila. Aplicar calcário 60–90 dias antes do plantio.</div>
+      </div>
+    </div>
+
+    <!-- DIAGNÓSTICO FOLIAR (LAUDO) -->
+    <div class="calc-box" style="margin-top:14px">
+      <h3>🔬 Diagnóstico foliar da soja <span class="badge-tec">Painel visual pro cliente</span></h3>
+      <p style="font-size:13px;color:var(--cinza);margin-bottom:12px;line-height:1.5">
+        Informe os teores do laudo foliar e o painel classifica cada nutriente em 🔴 Baixo, 🟢 Adequado ou 🔵 Alto — com alerta de desequilíbrio (Lei do Mínimo/DRIS). Gere a tela cheia ou o PDF pra mostrar ao cliente o que está bom e o que precisa corrigir.
+      </p>
+      <input type="file" id="laudoFile" accept=".pdf,.docx,.xls,.xlsx,.xlsb" style="display:none" onchange="lerArquivoLaudo(event)">
+      <button class="btn-calc" style="background:var(--cinza-cl);color:var(--verde);margin-bottom:12px" onclick="document.getElementById('laudoFile').click()">📂 Importar laudo (PDF, Word ou Excel)</button>
+      <div id="laudoLeituraStatus" style="font-size:13px;color:var(--cinza);margin-bottom:10px"></div>
+
+      <div class="row2">
+        <div class="field"><label>Cliente</label><select id="ld_cliente"><option value="">Sem cliente vinculado</option></select></div>
+        <div class="field"><label>Talhão/Área (opcional)</label><input id="ld_area" placeholder="ex: Talhão 3"></div>
+      </div>
+
+      <div class="laudo-grupo">Macronutrientes (g/kg)</div>
+      <div class="row2">
+        <div class="field"><label>Nitrogênio (N)</label><input type="number" step="0.1" id="ld_N" placeholder="ex: 42"></div>
+        <div class="field"><label>Fósforo (P)</label><input type="number" step="0.1" id="ld_P" placeholder="ex: 3.1"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Potássio (K)</label><input type="number" step="0.1" id="ld_K" placeholder="ex: 19"></div>
+        <div class="field"><label>Cálcio (Ca)</label><input type="number" step="0.1" id="ld_Ca" placeholder="ex: 5.2"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Magnésio (Mg)</label><input type="number" step="0.1" id="ld_Mg" placeholder="ex: 1.9"></div>
+        <div class="field"><label>Enxofre (S)</label><input type="number" step="0.1" id="ld_S" placeholder="ex: 2.5"></div>
+      </div>
+
+      <div class="laudo-grupo">Micronutrientes (mg/kg)</div>
+      <div class="row2">
+        <div class="field"><label>Boro (B)</label><input type="number" step="0.1" id="ld_B" placeholder="ex: 30"></div>
+        <div class="field"><label>Cobre (Cu)</label><input type="number" step="0.1" id="ld_Cu" placeholder="ex: 11"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>Ferro (Fe)</label><input type="number" step="0.1" id="ld_Fe" placeholder="ex: 160"></div>
+        <div class="field"><label>Manganês (Mn)</label><input type="number" step="0.1" id="ld_Mn" placeholder="ex: 60"></div>
+      </div>
+      <div class="field"><label>Zinco (Zn)</label><input type="number" step="0.1" id="ld_Zn" placeholder="ex: 25"></div>
+
+      <button class="btn-calc" onclick="gerarDiagnosticoFoliar()">🔬 Gerar diagnóstico visual</button>
+
+      <div class="result" id="r_laudo">
+        <div id="laudoBarras"></div>
+        <div class="laudo-resumo" id="laudoResumo"></div>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button class="btn-calc" style="flex:1;background:var(--cinza-cl);color:var(--verde)" onclick="abrirLaudoTelaCheia()">🖥️ Tela cheia</button>
+          <button class="btn-calc" style="flex:1" onclick="gerarPDFLaudo()">📄 PDF pro cliente</button>
+        </div>
+        <div class="result-note">Faixas de suficiência foliar de referência para soja. Diagnóstico de apoio comercial — sempre valide agronomicamente antes de recomendar a correção ao cliente.</div>
       </div>
     </div>
   </div>
@@ -1317,6 +1394,7 @@ function switchCalc(c){
   if(c==='precos') renderListaPrecos();
   if(c==='rapido'){ renderRapidoItens(); }
   if(c==='nutricao'){ atualizarRecomendacaoNut(); }
+  if(c==='solo'){ popularClientesLaudo(); }
 }
 
 /* SEMENTES */
@@ -1378,6 +1456,369 @@ function calcSolo(){
   document.getElementById('rso_nc').textContent=ncCorr.toFixed(2);
   document.getElementById('rso_detail').innerHTML=html;
   document.getElementById('r_solo').classList.add('show');
+}
+
+/* ============================================================
+   DIAGNÓSTICO FOLIAR — SOJA (macro + micronutrientes)
+   Faixas de suficiência foliar de referência para a cultura da soja.
+   Abaixo do mínimo = crítico (red-alert); dentro da faixa = adequado
+   (green-optimal); acima do máximo = alto/excesso (blue-excess).
+============================================================ */
+const FOLIAR_SOJA={
+  N:{nome:'Nitrogênio',grupo:'macro',unidade:'g/kg',baixoMax:40.0,altoMin:55.0},
+  P:{nome:'Fósforo',grupo:'macro',unidade:'g/kg',baixoMax:2.5,altoMin:4.0},
+  K:{nome:'Potássio',grupo:'macro',unidade:'g/kg',baixoMax:17.0,altoMin:25.0},
+  Ca:{nome:'Cálcio',grupo:'macro',unidade:'g/kg',baixoMax:4.4,altoMin:6.2},
+  Mg:{nome:'Magnésio',grupo:'macro',unidade:'g/kg',baixoMax:1.6,altoMin:2.2},
+  S:{nome:'Enxofre',grupo:'macro',unidade:'g/kg',baixoMax:2.1,altoMin:3.0},
+  B:{nome:'Boro',grupo:'micro',unidade:'mg/kg',baixoMax:21,altoMin:55},
+  Cu:{nome:'Cobre',grupo:'micro',unidade:'mg/kg',baixoMax:9.1,altoMin:14.1},
+  Fe:{nome:'Ferro',grupo:'micro',unidade:'mg/kg',baixoMax:122.5,altoMin:219.7},
+  Mn:{nome:'Manganês',grupo:'micro',unidade:'mg/kg',baixoMax:31,altoMin:135},
+  Zn:{nome:'Zinco',grupo:'micro',unidade:'mg/kg',baixoMax:21,altoMin:50}
+};
+const LAUDO_ACAO={
+  N:{baixo:'Adubação nitrogenada de cobertura ou reforço da inoculação/fixação biológica (Bradyrhizobium).',alto:'Excesso pode atrasar maturação e favorecer acamamento — reveja a fonte de N e a inoculação.'},
+  P:{baixo:'Fósforo no sulco/lanço, com reforço via foliar em V4–R1 para destravar o enchimento de grão.',alto:'Raramente tóxico isolado, mas pode induzir deficiência de Zinco — monitore o Zn no próximo laudo.'},
+  K:{baixo:'Potássio de cobertura ou foliar fracionado — K é decisivo no enchimento de grão e na qualidade da semente.',alto:'Reforce o monitoramento de Magnésio e Cálcio — excesso de K compete pela absorção desses cátions.'},
+  Ca:{baixo:'Calagem/gessagem para elevar o Cálcio disponível — reforça parede celular e formação de vagem.',alto:'Excesso raro isolado; verifique se está bloqueando a entrada de Magnésio e Potássio.'},
+  Mg:{baixo:'Calcário dolomítico ou sulfato de magnésio foliar — Mg baixo costuma aparecer junto de K/Ca em excesso.',alto:'Pouco comum causar toxidez isolada; confirme junto dos demais cátions.'},
+  S:{baixo:'Enxofre via gesso agrícola ou fonte sulfatada — S trabalha junto com o N na síntese de proteína e óleo do grão.',alto:'Sem risco relevante isolado nesta faixa; mantenha o monitoramento.'},
+  B:{baixo:'Boro foliar fracionado no florescimento (período mais sensível) — a falta de B derruba o pegamento de vagem.',alto:'Boro tem margem estreita entre suficiência e toxidez — não aplique nova dose sem um novo laudo.'},
+  Cu:{baixo:'Cobre foliar em formulação quelatizada — atua na formação de pólen e na lignificação.',alto:'Verifique histórico de aplicações de fungicida cúprico acumulado no solo.'},
+  Fe:{baixo:'Ferro quelatizado foliar — falta é comum em solo mal drenado ou de pH alto.',alto:'Normalmente sem efeito prático nesta faixa.'},
+  Mn:{baixo:'Manganês foliar — a falta é comum em solo bem corrigido (pH alto) e reduz a fotossíntese.',alto:'Excesso pode ocorrer em solo ácido mal corrigido; confirme o pH.'},
+  Zn:{baixo:'Zinco foliar ou via solo — é a carência mais comum na soja e afeta crescimento e florescimento.',alto:'Sem risco relevante isolado nesta faixa.'}
+};
+function classificarFoliar(chave,valor){
+  const ref=FOLIAR_SOJA[chave];
+  if(!ref||valor==null||isNaN(valor)) return null;
+  let status,classe,label;
+  if(valor<ref.baixoMax){ status='baixo'; classe='red-alert'; label='CRÍTICO'; }
+  else if(valor<=ref.altoMin){ status='ideal'; classe='green-optimal'; label='ADEQUADO'; }
+  else { status='alto'; classe='blue-excess'; label='ALTO'; }
+  return {chave,valor,ref,status,classe,label};
+}
+function coletarValoresFoliar(){
+  const resultados=[];
+  Object.keys(FOLIAR_SOJA).forEach(k=>{
+    const el=document.getElementById('ld_'+k);
+    const v=el&&el.value!==''?parseFloat(String(el.value).replace(',','.')):NaN;
+    if(!isNaN(v)){
+      const r=classificarFoliar(k,v);
+      if(r) resultados.push(r);
+    }
+  });
+  return resultados;
+}
+function montarBarraFoliar(r){
+  const escala=Math.max(r.ref.altoMin*1.4, r.valor*1.05);
+  const pctBaixo=(r.ref.baixoMax/escala)*100;
+  const pctIdeal=((r.ref.altoMin-r.ref.baixoMax)/escala)*100;
+  const pctAlto=Math.max(0,100-pctBaixo-pctIdeal);
+  const pctMarcador=Math.min(98,Math.max(1,(r.valor/escala)*100));
+  const icone=r.label==='CRÍTICO'?'🔴':(r.label==='ADEQUADO'?'🟢':'🔵');
+  return `
+  <div class="laudo-nut">
+    <div class="ln-head">
+      <span class="ln-nome">${r.ref.nome} (${r.chave})</span>
+      <span class="ln-valor">${r.valor.toLocaleString('pt-BR')} ${r.ref.unidade}</span>
+      <span class="ln-badge ${r.classe}">${icone} ${r.label}</span>
+    </div>
+    <div class="ln-track">
+      <div class="ln-zone z-baixo" style="width:${pctBaixo}%"></div>
+      <div class="ln-zone z-ideal" style="width:${pctIdeal}%"></div>
+      <div class="ln-zone z-alto" style="width:${pctAlto}%"></div>
+      <div class="ln-marker ${r.classe}" style="left:calc(${pctMarcador}% - 2px)"></div>
+    </div>
+  </div>`;
+}
+function montarResumoFoliar(resultados){
+  const limitantes=resultados.filter(r=>r.status==='baixo');
+  const excessos=resultados.filter(r=>r.status==='alto');
+  let html='<b>📋 Diagnóstico agronômico</b><br><br>';
+  if(!limitantes.length){
+    html+='✅ Nenhum nutriente abaixo do nível crítico — a lavoura não está sendo limitada por carência nutricional nesta análise.';
+  } else {
+    html+=`<span class="lim">⚠️ Fator(es) limitante(s):</span> ${limitantes.map(r=>`${r.ref.nome} (${r.chave})`).join(', ')}. Pela Lei do Mínimo, mesmo com os demais nutrientes em bom nível, a produtividade fica travada por quem está no vermelho.`;
+  }
+  html+='<br><br><b>Ação recomendada:</b><ul style="margin:6px 0 0 18px;padding:0">';
+  if(limitantes.length){
+    limitantes.forEach(r=>{ html+=`<li><b>${r.ref.nome}:</b> ${(LAUDO_ACAO[r.chave]&&LAUDO_ACAO[r.chave].baixo)||'Corrigir via adubação de solo ou foliar conforme a fase da cultura.'}</li>`; });
+  } else {
+    html+='<li>Manutenção do manejo atual — confirme a estabilidade no próximo laudo.</li>';
+  }
+  html+='</ul>';
+  if(excessos.length){
+    html+=`<div class="laudo-dris">🔵 <b>Excesso identificado:</b> ${excessos.map(r=>r.ref.nome).join(', ')}. ${excessos.map(r=>(LAUDO_ACAO[r.chave]&&LAUDO_ACAO[r.chave].alto)||'').filter(Boolean).join(' ')}</div>`;
+  }
+  const kAlto=resultados.find(r=>r.chave==='K'&&r.status==='alto');
+  const mg=resultados.find(r=>r.chave==='Mg');
+  if(kAlto&&mg){
+    html+= mg.status==='baixo'
+      ? `<div class="laudo-dris">⚖️ <b>Alerta de equilíbrio (DRIS):</b> Potássio em excesso e Magnésio já no crítico — o antagonismo K×Mg provavelmente está agravando essa carência. Priorize a correção do Mg.</div>`
+      : `<div class="laudo-dris">⚖️ <b>Alerta de equilíbrio (DRIS):</b> Potássio em excesso tende a "derrubar" a absorção de Magnésio — mesmo o Mg estando ${mg.status==='ideal'?'adequado':'alto'} hoje, monitore de perto no próximo laudo.</div>`;
+  }
+  return html;
+}
+function gerarDiagnosticoFoliar(){
+  const resultados=coletarValoresFoliar();
+  if(!resultados.length){ alert('Informe pelo menos um nutriente do laudo para gerar o diagnóstico.'); return; }
+  const macros=resultados.filter(r=>r.ref.grupo==='macro');
+  const micros=resultados.filter(r=>r.ref.grupo==='micro');
+  let html='';
+  if(macros.length) html+='<div class="laudo-grupo">Macronutrientes</div>'+macros.map(montarBarraFoliar).join('');
+  if(micros.length) html+='<div class="laudo-grupo">Micronutrientes</div>'+micros.map(montarBarraFoliar).join('');
+  document.getElementById('laudoBarras').innerHTML=html;
+  document.getElementById('laudoResumo').innerHTML=montarResumoFoliar(resultados);
+  document.getElementById('r_laudo').classList.add('show');
+  document.getElementById('r_laudo').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function popularClientesLaudo(){
+  const sel=document.getElementById('ld_cliente'); if(!sel) return;
+  const atual=sel.value;
+  sel.innerHTML='<option value="">Sem cliente vinculado</option>'+(DB.clientes||[]).map(c=>`<option value="${c.id}">${c.nome}</option>`).join('');
+  sel.value=atual||'';
+}
+
+/* ---- Importação do laudo por arquivo (PDF/Word/Excel) — melhor esforço,
+   sempre revisar os valores antes de gerar o painel/PDF ---- */
+function extrairTextoExcel(arrayBuffer){
+  if(typeof XLSX==='undefined') throw new Error('Leitor de planilhas não carregou — verifique sua conexão e tente de novo.');
+  const wb=XLSX.read(new Uint8Array(arrayBuffer),{type:'array'});
+  return wb.SheetNames.map(nome=>XLSX.utils.sheet_to_csv(wb.Sheets[nome])).join('\n');
+}
+const LAUDO_ALIASES_NOME=[
+  ['N',/nitrog[êe]nio/i],['P',/f[óo]sforo/i],['K',/pot[áa]ssio/i],['Ca',/c[áa]lcio/i],
+  ['Mg',/magn[ée]sio/i],['S',/enxofre/i],['B',/\bboro\b/i],['Cu',/\bcobre\b/i],
+  ['Fe',/\bferro\b/i],['Mn',/mangan[êe]s/i],['Zn',/\bzinco\b/i]
+];
+const LAUDO_ALIASES_SIMBOLO=[
+  ['N',/(?:^|[^a-zà-ú])n(?:\s*[-:=(]|\s*\(?\s*g\/kg)/i],
+  ['P',/(?:^|[^a-zà-ú])p(?:\s*[-:=(]|\s*\(?\s*g\/kg)/i],
+  ['K',/(?:^|[^a-zà-ú])k(?:\s*[-:=(]|\s*\(?\s*g\/kg)/i],
+  ['Ca',/(?:^|[^a-zà-ú])ca(?:\s*[-:=(]|\s*\(?\s*g\/kg)/i],
+  ['Mg',/(?:^|[^a-zà-ú])mg(?:\s*[-:=(]|\s*\(?\s*g\/kg)/i],
+  ['S',/(?:^|[^a-zà-ú])s(?:\s*[-:=(]|\s*\(?\s*g\/kg)/i],
+  ['B',/(?:^|[^a-zà-ú])b(?:\s*[-:=(]|\s*\(?\s*mg\/kg)/i],
+  ['Cu',/(?:^|[^a-zà-ú])cu(?:\s*[-:=(]|\s*\(?\s*mg\/kg)/i],
+  ['Fe',/(?:^|[^a-zà-ú])fe(?:\s*[-:=(]|\s*\(?\s*mg\/kg)/i],
+  ['Mn',/(?:^|[^a-zà-ú])mn(?:\s*[-:=(]|\s*\(?\s*mg\/kg)/i],
+  ['Zn',/(?:^|[^a-zà-ú])zn(?:\s*[-:=(]|\s*\(?\s*mg\/kg)/i]
+];
+function extrairValoresLaudoTexto(texto){
+  const linhas=texto.split('\n').map(l=>l.trim()).filter(Boolean);
+  const numRe=/-?\d{1,4}(?:[.,]\d{1,3})?/;
+  const achados={};
+  function tentarPasso(lista){
+    linhas.forEach(linha=>{
+      lista.forEach(([chave,re])=>{
+        if(achados[chave]!=null) return;
+        const m=linha.match(re);
+        if(!m) return;
+        const resto=linha.slice((m.index||0)+m[0].length);
+        const mn=resto.match(numRe)||linha.match(numRe);
+        if(mn){
+          const v=parseFloat(mn[0].replace(',','.'));
+          if(!isNaN(v)) achados[chave]=v;
+        }
+      });
+    });
+  }
+  tentarPasso(LAUDO_ALIASES_NOME);
+  tentarPasso(LAUDO_ALIASES_SIMBOLO);
+  return achados;
+}
+function lerArquivoLaudo(ev){
+  const file=ev.target.files[0]; if(!file) return;
+  const status=document.getElementById('laudoLeituraStatus');
+  status.textContent='⏳ Lendo laudo...';
+  const ext=file.name.toLowerCase().split('.').pop();
+  const reader=new FileReader();
+  reader.onload=async()=>{
+    try{
+      let texto='';
+      if(ext==='pdf') texto=await extrairTextoPDF(reader.result);
+      else if(ext==='docx') texto=await extrairTextoDocx(reader.result);
+      else if(ext==='xls'||ext==='xlsx'||ext==='xlsb') texto=extrairTextoExcel(reader.result);
+      else throw new Error('Envie um arquivo .pdf, .docx, .xls, .xlsx ou .xlsb');
+      const achados=extrairValoresLaudoTexto(texto);
+      const chaves=Object.keys(achados);
+      if(!chaves.length){
+        status.innerHTML='⚠️ Não consegui identificar valores de nutrientes automaticamente neste arquivo. Preencha manualmente abaixo.';
+      } else {
+        chaves.forEach(k=>{ const el=document.getElementById('ld_'+k); if(el) el.value=achados[k]; });
+        status.innerHTML=`✅ ${chaves.length} nutriente(s) reconhecido(s) automaticamente (${chaves.join(', ')}). <b>Revise os valores</b> antes de gerar o diagnóstico.`;
+      }
+    }catch(e){
+      console.warn('lerArquivoLaudo',e);
+      status.innerHTML='❌ Não foi possível ler o arquivo: '+e.message;
+    }
+    ev.target.value='';
+  };
+  reader.onerror=()=>{ status.textContent='❌ Erro ao ler o arquivo.'; };
+  reader.readAsArrayBuffer(file);
+}
+
+/* ---- Tela cheia (HTML) e PDF do diagnóstico foliar, para mostrar/enviar ao cliente ---- */
+function _dadosLaudoParaSaida(){
+  const resultados=coletarValoresFoliar();
+  if(!resultados.length){ alert('Gere o diagnóstico antes de abrir a tela cheia ou exportar o PDF.'); return null; }
+  const clienteSel=document.getElementById('ld_cliente');
+  const cliente=clienteSel&&clienteSel.value?(DB.clientes||[]).find(c=>c.id===clienteSel.value):null;
+  const area=(document.getElementById('ld_area')||{}).value||'';
+  return {resultados, clienteNome:cliente?cliente.nome:'', area};
+}
+function abrirLaudoTelaCheia(){
+  const dados=_dadosLaudoParaSaida(); if(!dados) return;
+  const macros=dados.resultados.filter(r=>r.ref.grupo==='macro');
+  const micros=dados.resultados.filter(r=>r.ref.grupo==='micro');
+  const barrasHtml=(macros.length?'<div class="laudo-grupo">Macronutrientes</div>'+macros.map(montarBarraFoliar).join(''):'')
+                  +(micros.length?'<div class="laudo-grupo">Micronutrientes</div>'+micros.map(montarBarraFoliar).join(''):'');
+  const resumoHtml=montarResumoFoliar(dados.resultados);
+  const win=window.open('','_blank');
+  if(!win){ alert('O navegador bloqueou a nova aba. Permita pop-ups para este site e tente de novo.'); return; }
+  win.document.write(`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnóstico Foliar${dados.clienteNome?' — '+dados.clienteNome:''}</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f4f6f8;color:#1f2a36;padding:24px;max-width:820px;margin:0 auto}
+h1{color:#1E4A18;font-size:24px;margin-bottom:2px}
+.sub{color:#6b7785;font-size:14px;margin-bottom:24px}
+.laudo-grupo{font-size:13px;font-weight:800;color:#F2A900;text-transform:uppercase;letter-spacing:.5px;margin:22px 0 10px}
+.laudo-nut{margin-bottom:18px}
+.ln-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.ln-nome{font-size:15px;font-weight:700}
+.ln-valor{font-size:13px;color:#6b7785;font-weight:600}
+.ln-badge{font-size:11px;font-weight:800;padding:4px 10px;border-radius:10px;color:#fff}
+.ln-badge.red-alert{background:#c0392b} .ln-badge.green-optimal{background:#2e8b57} .ln-badge.blue-excess{background:#2470c4}
+.ln-track{position:relative;height:20px;border-radius:10px;overflow:hidden;display:flex;background:#eee}
+.ln-zone{height:100%} .z-baixo{background:#f8d7d3} .z-ideal{background:#cdeccb} .z-alto{background:#cfe2f7}
+.ln-marker{position:absolute;top:-4px;width:5px;height:28px;border-radius:3px;box-shadow:0 0 0 2px #fff}
+.ln-marker.red-alert{background:#c0392b} .ln-marker.green-optimal{background:#2e8b57} .ln-marker.blue-excess{background:#2470c4}
+.laudo-resumo{background:#fff8e6;border:2px solid #F2A900;border-radius:14px;padding:18px;margin:26px 0;font-size:14px;line-height:1.7}
+.laudo-resumo b{color:#1E4A18}
+.lim{color:#c0392b;font-weight:800}
+.laudo-dris{background:#eaf3fb;border-left:4px solid #2470c4;border-radius:10px;padding:10px 14px;margin-top:10px;font-size:13px;color:#1a4a75}
+.rodape{margin-top:30px;font-size:11px;color:#6b7785;text-align:center}
+@media print{ body{padding:0;max-width:100%} }
+</style></head><body>
+<h1>🔬 Diagnóstico Foliar — Soja</h1>
+<div class="sub">${[dados.clienteNome,dados.area,new Date().toLocaleDateString('pt-BR')].filter(Boolean).join(' · ')}</div>
+${barrasHtml}
+${resumoHtml}
+<div class="rodape">Painel do Representante · JMG Agropastoril — diagnóstico de apoio comercial, valide agronomicamente antes de recomendar a correção ao cliente.</div>
+</body></html>`);
+  win.document.close();
+}
+function gerarPDFLaudo(){
+  if(typeof window.jspdf==='undefined'){
+    alert('Gerador de PDF ainda não carregou. Verifique sua conexão com a internet e tente novamente em alguns segundos.');
+    return;
+  }
+  const dados=_dadosLaudoParaSaida(); if(!dados) return;
+  if(_logoPedidoImg){ gerarPDFLaudoConteudo(dados,_logoPedidoImg); return; }
+  const img=new Image();
+  img.onload=()=>{ _logoPedidoImg=img; gerarPDFLaudoConteudo(dados,img); };
+  img.onerror=()=>{ gerarPDFLaudoConteudo(dados,null); };
+  img.src='logo-jmg-pedido.png';
+}
+function gerarPDFLaudoConteudo(dados,logoImg){
+  const { jsPDF }=window.jspdf;
+  const doc=new jsPDF();
+  const resultados=dados.resultados;
+  let y=18;
+  if(logoImg){
+    const largura=40, altura=largura*(logoImg.height/logoImg.width);
+    try{ doc.addImage(logoImg,'PNG',14,y,largura,altura); }catch(e){}
+    y+=altura+8;
+  } else {
+    doc.setFontSize(16); doc.setTextColor(54,124,43);
+    doc.text('JMG Agropastoril', 14, y); y+=8;
+  }
+  doc.setDrawColor(54,124,43); doc.line(14,y,196,y); y+=10;
+  doc.setFontSize(15); doc.setTextColor(30,74,24);
+  doc.text('Diagnóstico Foliar — Soja', 14, y); y+=7;
+  doc.setFontSize(10); doc.setTextColor(90);
+  doc.text([dados.clienteNome,dados.area,new Date().toLocaleDateString('pt-BR')].filter(Boolean).join('   ·   '), 14, y); y+=10;
+
+  const corPorClasse={'red-alert':[192,57,43],'green-optimal':[46,139,87],'blue-excess':[36,112,196]};
+  const zonaBaixo=[248,215,211], zonaIdeal=[205,236,203], zonaAlto=[207,226,247];
+
+  function desenharGrupo(titulo,lista){
+    if(!lista.length) return;
+    if(y>250){ doc.addPage(); y=20; }
+    doc.setFontSize(11); doc.setTextColor(242,169,0);
+    doc.text(titulo.toUpperCase(), 14, y); y+=6;
+    lista.forEach(r=>{
+      if(y>265){ doc.addPage(); y=20; }
+      doc.setFontSize(10); doc.setTextColor(30);
+      doc.text(`${r.ref.nome} (${r.chave})`, 14, y);
+      doc.setTextColor(90);
+      doc.text(`${r.valor.toLocaleString('pt-BR')} ${r.ref.unidade}`, 100, y);
+      const cor=corPorClasse[r.classe];
+      doc.setTextColor(cor[0],cor[1],cor[2]);
+      doc.setFont(undefined,'bold');
+      doc.text(r.label, 150, y);
+      doc.setFont(undefined,'normal');
+      y+=4;
+      const escala=Math.max(r.ref.altoMin*1.4, r.valor*1.05);
+      const largTotal=140, x0=14;
+      const wBaixo=(r.ref.baixoMax/escala)*largTotal;
+      const wIdeal=((r.ref.altoMin-r.ref.baixoMax)/escala)*largTotal;
+      const wAlto=Math.max(0,largTotal-wBaixo-wIdeal);
+      doc.setFillColor(zonaBaixo[0],zonaBaixo[1],zonaBaixo[2]); doc.rect(x0,y,wBaixo,4,'F');
+      doc.setFillColor(zonaIdeal[0],zonaIdeal[1],zonaIdeal[2]); doc.rect(x0+wBaixo,y,wIdeal,4,'F');
+      doc.setFillColor(zonaAlto[0],zonaAlto[1],zonaAlto[2]); doc.rect(x0+wBaixo+wIdeal,y,wAlto,4,'F');
+      const posMarcador=Math.min(largTotal-1,Math.max(1,(r.valor/escala)*largTotal));
+      doc.setFillColor(cor[0],cor[1],cor[2]);
+      doc.rect(x0+posMarcador-0.75,y-1,1.5,6,'F');
+      y+=9;
+    });
+    y+=3;
+  }
+  desenharGrupo('Macronutrientes', resultados.filter(r=>r.ref.grupo==='macro'));
+  desenharGrupo('Micronutrientes', resultados.filter(r=>r.ref.grupo==='micro'));
+
+  if(y>225){ doc.addPage(); y=20; }
+  const limitantes=resultados.filter(r=>r.status==='baixo');
+  doc.setFontSize(12); doc.setTextColor(30,74,24);
+  doc.text('Diagnóstico agronômico', 14, y); y+=7;
+  doc.setFontSize(9.5); doc.setTextColor(50);
+  const textoResumo = !limitantes.length
+    ? 'Nenhum nutriente abaixo do nível crítico nesta análise — a lavoura não está sendo limitada por carência nutricional pelos dados informados.'
+    : `Fator(es) limitante(s): ${limitantes.map(r=>r.ref.nome).join(', ')}. Pela Lei do Mínimo, a produtividade fica travada por quem está abaixo do nível crítico, mesmo com os demais nutrientes em bom nível.`;
+  let linhas=doc.splitTextToSize(textoResumo,182);
+  doc.text(linhas,14,y); y+=linhas.length*4.5+4;
+  if(limitantes.length){
+    if(y>270){ doc.addPage(); y=20; }
+    doc.setFontSize(10); doc.setTextColor(30,74,24);
+    doc.text('Ação recomendada:',14,y); y+=5;
+    doc.setFontSize(9); doc.setTextColor(50);
+    limitantes.forEach(r=>{
+      if(y>278){ doc.addPage(); y=20; }
+      const txt=`• ${r.ref.nome}: ${(LAUDO_ACAO[r.chave]&&LAUDO_ACAO[r.chave].baixo)||'Corrigir via adubação de solo ou foliar conforme a fase da cultura.'}`;
+      const l=doc.splitTextToSize(txt,182);
+      doc.text(l,14,y); y+=l.length*4.3+1.5;
+    });
+  }
+  const kAlto=resultados.find(r=>r.chave==='K'&&r.status==='alto');
+  const mg=resultados.find(r=>r.chave==='Mg');
+  if(kAlto&&mg){
+    if(y>265){ doc.addPage(); y=20; }
+    doc.setFontSize(9); doc.setTextColor(36,112,196);
+    const txtDris = mg.status==='baixo'
+      ? 'Alerta de equilíbrio (DRIS): Potássio em excesso e Magnésio já crítico — o antagonismo K×Mg provavelmente agrava essa carência. Priorize a correção do Mg.'
+      : 'Alerta de equilíbrio (DRIS): Potássio em excesso tende a reduzir a absorção de Magnésio — monitore de perto no próximo laudo.';
+    const l=doc.splitTextToSize('⚖️ '+txtDris,182);
+    doc.text(l,14,y); y+=l.length*4.3+2;
+  }
+
+  doc.setFontSize(8); doc.setTextColor(120);
+  doc.text('Diagnóstico de apoio comercial — valide agronomicamente antes de recomendar a correção. Gerado pelo Painel do Representante · JMG Agropastoril', 14, 290);
+
+  doc.save(`diagnostico-foliar-${(dados.clienteNome||'cliente').replace(/[^a-zA-Z0-9]+/g,'-')}-${Date.now()}.pdf`);
 }
 
 /* PASTAGEM */
